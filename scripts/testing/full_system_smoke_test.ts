@@ -9,17 +9,31 @@ const baseUrl = process.argv[2] ?? "http://127.0.0.1:7300";
 const thisFile = fileURLToPath(import.meta.url);
 const projectRoot = path.resolve(path.dirname(thisFile), "..", "..");
 
-function assert(condition, message) {
+interface RegistrationFixture {
+  id: string;
+  payload: {
+    name: string;
+    hostname: string;
+    [key: string]: unknown;
+  };
+}
+
+interface ApplicationPayload extends Record<string, unknown> {
+  name: string;
+  hostname: string;
+}
+
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }
 }
 
-function uniqueSuffix() {
+function uniqueSuffix(): string {
   return `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 }
 
-function withHostnameSuffix(hostname, suffix) {
+function withHostnameSuffix(hostname: string, suffix: string): string {
   const labels = hostname.split(".").filter(Boolean);
   if (labels.length < 2) {
     return `${hostname}-${suffix}`;
@@ -28,7 +42,7 @@ function withHostnameSuffix(hostname, suffix) {
   return [`${head}-${suffix}`, ...rest].join(".");
 }
 
-async function requestJson(method, endpoint, body) {
+async function requestJson(method: string, endpoint: string, body?: unknown): Promise<any> {
   const response = await fetch(`${baseUrl}${endpoint}`, {
     method,
     headers: {
@@ -52,7 +66,12 @@ async function requestJson(method, endpoint, body) {
   return json;
 }
 
-async function requestExpectStatus(method, endpoint, expectedStatus, body) {
+async function requestExpectStatus(
+  method: string,
+  endpoint: string,
+  expectedStatus: number,
+  body?: unknown
+): Promise<any> {
   const response = await fetch(`${baseUrl}${endpoint}`, {
     method,
     headers: {
@@ -76,7 +95,7 @@ async function requestExpectStatus(method, endpoint, expectedStatus, body) {
   return json;
 }
 
-async function waitForJob(jobId, timeoutMs = 20000) {
+async function waitForJob(jobId: string, timeoutMs = 20000): Promise<any> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const jobsResponse = await requestJson("GET", "/api/jobs?limit=200");
@@ -94,7 +113,7 @@ async function waitForJob(jobId, timeoutMs = 20000) {
   throw new Error(`job timeout: ${jobId}`);
 }
 
-function fixturePayload(fixtures, fixtureId, suffix) {
+function fixturePayload(fixtures: RegistrationFixture[], fixtureId: string, suffix: string): ApplicationPayload {
   const fixture = fixtures.find((item) => item.id === fixtureId);
   assert(fixture, `fixture not found: ${fixtureId}`);
 
@@ -106,7 +125,7 @@ function fixturePayload(fixtures, fixtureId, suffix) {
   };
 }
 
-async function main() {
+async function main(): Promise<void> {
   const summary = {
     appIds: [],
     checked: []

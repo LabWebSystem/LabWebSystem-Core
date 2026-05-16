@@ -39,11 +39,11 @@ function listApplicationContainers() {
 }
 
 function listNetworks() {
-  const networks = new Set();
+  const networks = new Set<string>();
 
   for (const containerName of listApplicationContainers()) {
     const output = runDocker(["inspect", containerName, "--format", "{{json .NetworkSettings.Networks}}"]);
-    const parsed = JSON.parse(output);
+    const parsed = JSON.parse(output) as Record<string, unknown>;
 
     for (const networkName of Object.keys(parsed)) {
       if (!ignoredNetworks.has(networkName)) {

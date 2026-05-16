@@ -16,8 +16,8 @@ const envPath = path.join(rootDir, "core", "backend", ".env");
 const currentUid = typeof process.getuid === "function" ? process.getuid() : 1000;
 const currentGid = typeof process.getgid === "function" ? process.getgid() : 1000;
 
-function loadDotEnv(filePath) {
-  const result = {};
+function loadDotEnv(filePath: string): Promise<Record<string, string>> {
+  const result: Record<string, string> = {};
 
   return fs
     .readFile(filePath, "utf8")
@@ -52,12 +52,12 @@ function loadDotEnv(filePath) {
     .catch(() => result);
 }
 
-function toAbsolutePath(value, fallback) {
+function toAbsolutePath(value: string | undefined, fallback: string): string {
   const target = value ?? fallback;
   return path.isAbsolute(target) ? target : path.resolve(rootDir, target);
 }
 
-function dockerOutput(args) {
+function dockerOutput(args: string[]): string {
   try {
     return execFileSync("docker", args, {
       encoding: "utf8",
@@ -68,7 +68,7 @@ function dockerOutput(args) {
   }
 }
 
-function dockerSuccess(args) {
+function dockerSuccess(args: string[]): boolean {
   try {
     execFileSync("docker", args, {
       stdio: ["ignore", "pipe", "pipe"]
@@ -79,7 +79,7 @@ function dockerSuccess(args) {
   }
 }
 
-function dockerComposeSuccess(args) {
+function dockerComposeSuccess(args: string[]): boolean {
   try {
     execFileSync("docker", ["compose", ...args], {
       cwd: rootDir,
@@ -91,11 +91,11 @@ function dockerComposeSuccess(args) {
   }
 }
 
-function listUnique(values) {
+function listUnique(values: string[]): string[] {
   return [...new Set(values.filter((value) => value.length > 0))].sort((a, b) => a.localeCompare(b));
 }
 
-function listLabCoreProjects() {
+function listLabCoreProjects(): string[] {
   const projectLines = dockerOutput([
     "ps",
     "-a",
@@ -113,7 +113,7 @@ function listLabCoreProjects() {
   );
 }
 
-function listRuntimeComposeProjects(appsRoot) {
+function listRuntimeComposeProjects(appsRoot: string): string[] {
   const runtimeAppsSuffix = `/${path.relative(rootDir, appsRoot).replace(/\\/g, "/").replace(/^\/+/, "")}/`;
   const projectLines = dockerOutput([
     "ps",
@@ -142,7 +142,7 @@ function listRuntimeComposeProjects(appsRoot) {
   );
 }
 
-function listProjectContainers(projectName) {
+function listProjectContainers(projectName: string): string[] {
   return listUnique(
     dockerOutput([
       "ps",
@@ -155,7 +155,7 @@ function listProjectContainers(projectName) {
   );
 }
 
-function listProjectNetworks(projectName) {
+function listProjectNetworks(projectName: string): string[] {
   return listUnique(
     dockerOutput([
       "network",
@@ -168,7 +168,7 @@ function listProjectNetworks(projectName) {
   );
 }
 
-function listProjectVolumes(projectName) {
+function listProjectVolumes(projectName: string): string[] {
   return listUnique(
     dockerOutput([
       "volume",
@@ -181,17 +181,17 @@ function listProjectVolumes(projectName) {
   );
 }
 
-function isSafeTarget(targetPath) {
+function isSafeTarget(targetPath: string): boolean {
   const normalized = path.resolve(targetPath);
   const blocked = new Set([path.resolve("/"), path.resolve(os.homedir()), rootDir]);
   return !blocked.has(normalized);
 }
 
-function shellQuote(value) {
+function shellQuote(value: string): string {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
-async function pathExists(targetPath) {
+async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
     return true;
@@ -200,7 +200,7 @@ async function pathExists(targetPath) {
   }
 }
 
-async function clearDirectoryContents(directoryPath) {
+async function clearDirectoryContents(directoryPath: string): Promise<void> {
   try {
     await fs.mkdir(directoryPath, { recursive: true });
     const entries = await fs.readdir(directoryPath);
@@ -222,7 +222,7 @@ async function clearDirectoryContents(directoryPath) {
   }
 }
 
-async function removeFileIfExists(filePath) {
+async function removeFileIfExists(filePath: string): Promise<void> {
   try {
     await fs.rm(filePath, { force: true });
   } catch (error) {
@@ -236,7 +236,7 @@ async function removeFileIfExists(filePath) {
   }
 }
 
-function repairPathOwnership(targetPath) {
+function repairPathOwnership(targetPath: string): void {
   const resolvedPath = path.resolve(targetPath);
   const parentDir = path.dirname(resolvedPath);
   const baseName = path.basename(resolvedPath);
@@ -253,7 +253,7 @@ function repairPathOwnership(targetPath) {
   ]);
 }
 
-function checkPortOpen(port, host = "127.0.0.1") {
+function checkPortOpen(port: number, host = "127.0.0.1"): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = new net.Socket();
 
@@ -289,7 +289,7 @@ const composeStacks = [
   ["-f", "infra/compose/docker-compose.dns.yml", "down", "--remove-orphans"],
   ["-f", "infra/compose/docker-compose.dev.yml", "down", "--remove-orphans"]
 ];
-const runningPorts = [];
+const runningPorts: string[] = [];
 
 if (await checkPortOpen(config.apiPort)) {
   runningPorts.push(`backend port ${config.apiPort}`);

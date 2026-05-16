@@ -26,4 +26,4 @@ for _ in $(seq 1 30); do
 done
 
 curl -fsS "${BASE_URL}/health" >/dev/null
-node scripts/testing/full_system_smoke_test.mjs "${BASE_URL}"
+corepack yarn tsx scripts/testing/full_system_smoke_test.ts "${BASE_URL}"

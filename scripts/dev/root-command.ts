@@ -1,24 +1,31 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S node --enable-source-maps
 
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+type ComposeKey = "core" | "proxy" | "dns";
+type CommandHandler = () => void;
+
+interface RunOptions {
+  env?: NodeJS.ProcessEnv;
+}
+
 const thisFile = fileURLToPath(import.meta.url);
 const projectRoot = path.resolve(path.dirname(thisFile), "..", "..");
 
-const composeFiles = {
+const composeFiles: Record<ComposeKey, string> = {
   core: "infra/compose/docker-compose.dev.yml",
   proxy: "infra/compose/docker-compose.proxy.yml",
   dns: "infra/compose/docker-compose.dns.yml"
 };
 
-const labEnv = {
+const labEnv: NodeJS.ProcessEnv = {
   LAB_CORE_PROXY_HTTP_BIND: "0.0.0.0:80",
   LAB_CORE_DNS_BIND: "0.0.0.0:53"
 };
 
-function run(command, args, options = {}) {
+function run(command: string, args: string[], options: RunOptions = {}): void {
   const result = spawnSync(command, args, {
     cwd: projectRoot,
     stdio: "inherit",
@@ -33,19 +40,19 @@ function run(command, args, options = {}) {
   }
 }
 
-function runNodeScript(relativePath, args = [], options = {}) {
-  run("node", [relativePath, ...args], options);
+function runTsScript(relativePath: string, args: string[] = [], options: RunOptions = {}): void {
+  run("corepack", ["yarn", "tsx", relativePath, ...args], options);
 }
 
-function runCompose(composeKey, args, options = {}) {
+function runCompose(composeKey: ComposeKey, args: string[], options: RunOptions = {}): void {
   run("docker", ["compose", "-f", composeFiles[composeKey], ...args], options);
 }
 
-function ensureGeneratedFiles(options = {}) {
-  runNodeScript("scripts/dev/ensure-generated-files.mjs", [], options);
+function ensureGeneratedFiles(options: RunOptions = {}): void {
+  runTsScript("scripts/dev/ensure-generated-files.ts", [], options);
 }
 
-const commands = {
+const commands: Record<string, CommandHandler> = {
   dev: () => commands["dev:kernel:up"](),
   "dev:local": () => run("corepack", ["yarn", "workspace", "@lab-core/backend", "dev"]),
   "dev:backend": () => run("corepack", ["yarn", "workspace", "@lab-core/backend", "dev"]),
@@ -69,7 +76,7 @@ const commands = {
     runCompose("core", ["logs", "-f", "backend", "dashboard"], {
       env: { LAB_CORE_HOST_PROJECT_ROOT: projectRoot }
     }),
-  "dev:kernel:logs": () => runNodeScript("scripts/dev/stream-kernel-logs.mjs"),
+  "dev:kernel:logs": () => runTsScript("scripts/dev/stream-kernel-logs.ts"),
   "dev:kernel:up": () => {
     commands["dev:core:up"]();
     commands["dev:proxy"]();
@@ -84,7 +91,7 @@ const commands = {
   "lab:down": () => commands["dev:kernel:down:lab"](),
   "lab:down-clean": () => {
     commands["lab:down"]();
-    runNodeScript("scripts/maintenance/reset-lab-core.mjs", ["--yes"]);
+    runTsScript("scripts/maintenance/reset-lab-core.ts", ["--yes"]);
   },
   "lab:logs": () => commands["dev:kernel:logs"](),
   "dev:lab": () => commands["lab:up"](),
@@ -99,26 +106,26 @@ const commands = {
   "dev:proxy": () => {
     ensureGeneratedFiles();
     runCompose("proxy", ["up", "-d", "proxy"]);
-    runNodeScript("scripts/dev/refresh-proxy-networks.mjs");
+    runTsScript("scripts/dev/refresh-proxy-networks.ts");
   },
   "dev:proxy:refresh": () => {
     ensureGeneratedFiles();
-    runNodeScript("scripts/dev/refresh-proxy-networks.mjs");
+    runTsScript("scripts/dev/refresh-proxy-networks.ts");
     run("docker", ["restart", "labcore-dev-proxy-proxy-1"]);
   },
   "dev:proxy:down": () => runCompose("proxy", ["down"]),
   "dev:proxy:logs": () => runCompose("proxy", ["logs", "-f", "proxy"]),
-  "permissions:repair": () => runNodeScript("scripts/dev/repair-managed-permissions.mjs"),
-  "maintenance:reset": () => runNodeScript("scripts/maintenance/reset-lab-core.mjs"),
-  "maintenance:reset:yes": () => runNodeScript("scripts/maintenance/reset-lab-core.mjs", ["--yes"]),
+  "permissions:repair": () => runTsScript("scripts/dev/repair-managed-permissions.ts"),
+  "maintenance:reset": () => runTsScript("scripts/maintenance/reset-lab-core.ts"),
+  "maintenance:reset:yes": () => runTsScript("scripts/maintenance/reset-lab-core.ts", ["--yes"]),
   build: () => {
     run("corepack", ["yarn", "workspace", "@lab-core/backend", "build"]);
     run("corepack", ["yarn", "workspace", "@lab-core/dashboard", "build"]);
   },
   "test:register-fixtures": () => run("bash", ["scripts/testing/register_app_fixtures.sh"]),
   "test:smoke": () => run("bash", ["scripts/testing/run_full_system_smoke_test.sh"]),
-  "config:init": () => runNodeScript("scripts/config/env-wizard.mjs", ["init"]),
-  "config:reset": () => runNodeScript("scripts/config/env-wizard.mjs", ["reset"]),
+  "config:init": () => runTsScript("scripts/config/env-wizard.ts", ["init"]),
+  "config:reset": () => runTsScript("scripts/config/env-wizard.ts", ["reset"]),
   "dev:kernel:up:lab": () => {
     runWithEnv(labEnv, () => commands["dev:kernel:up"]());
   },
@@ -127,31 +134,32 @@ const commands = {
   }
 };
 
-function runWithEnv(env, fn) {
-  const prev = {};
+function runWithEnv(env: NodeJS.ProcessEnv, fn: () => void): void {
+  const previousValues: Record<string, string | undefined> = {};
   const keys = Object.keys(env);
   for (const key of keys) {
-    prev[key] = process.env[key];
+    previousValues[key] = process.env[key];
     process.env[key] = env[key];
   }
   try {
     fn();
   } finally {
     for (const key of keys) {
-      if (typeof prev[key] === "undefined") {
+      if (typeof previousValues[key] === "undefined") {
         delete process.env[key];
       } else {
-        process.env[key] = prev[key];
+        process.env[key] = previousValues[key];
       }
     }
   }
 }
 
-function printUsageAndExit() {
+function printUsageAndExit(): never {
   const names = Object.keys(commands)
     .filter((name) => !name.endsWith(":lab"))
     .sort((a, b) => a.localeCompare(b));
-  console.error("Usage: node scripts/dev/root-command.mjs <command>");
+
+  console.error("Usage: yarn <command>");
   console.error("Available commands:");
   for (const name of names) {
     console.error(`  - ${name}`);
