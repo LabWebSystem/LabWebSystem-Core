@@ -50,12 +50,12 @@ if (!guard.ok) {
 ```
 
 ## CLI usage
-- `yarn labcore init --template standard`
-- `yarn labcore inspect --profile dev-sim`
-- `yarn labcore lint --profile dev-sim`
-- `yarn labcore preflight --profile dev-sim`
-- `yarn labcore export --profile prod --out build/labcore-payload.json`
-- `yarn labcore guard prod`
+- `yarn sdk:labcore init --template standard`
+- `yarn sdk:labcore inspect --profile dev-sim`
+- `yarn sdk:labcore lint --profile dev-sim`
+- `yarn sdk:labcore preflight --profile dev-sim`
+- `yarn sdk:labcore export --profile prod --out build/labcore-payload.json`
+- `yarn sdk:labcore guard prod`
 
 ## Build/Test
 - `yarn sdk:build`
