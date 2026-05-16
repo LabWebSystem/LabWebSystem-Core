@@ -347,6 +347,10 @@ async function confirmExistingFile(fileExists) {
     return true;
   }
 
+  if (process.env.LAB_CORE_ENV_WIZARD_SKIP_EXISTING_CONFIRM === "1") {
+    return true;
+  }
+
   if (command === "init") {
     return confirm({
       message: ".env は既に存在します。バックアップを取って上書きしますか？",

@@ -43,7 +43,7 @@ interface KeyEvent {
 const thisFile = fileURLToPath(import.meta.url);
 const projectRoot = path.resolve(path.dirname(thisFile), "..", "..");
 const packageJsonPath = path.join(projectRoot, "package.json");
-const SELF_SCRIPT_NAME = "tasks";
+const SELF_SCRIPT_NAME = "launcher";
 const SEARCH_BACK = "__search_back__";
 const RESET = "\x1b[0m";
 
@@ -133,8 +133,8 @@ function commandLabelInTree(item: VisibleCommandItem): string {
 
 function ensureTty(): void {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    console.error("[tasks] TUIの実行にはTTYが必要です。");
-    console.error("[tasks] ターミナル上で `yarn run tasks` を実行してください。");
+    console.error("[launcher] TUIの実行にはTTYが必要です。");
+    console.error("[launcher] ターミナル上で `yarn run launcher` を実行してください。");
     process.exit(1);
   }
 }
@@ -357,7 +357,7 @@ async function chooseBySearch(entries: ScriptEntry[]): Promise<string | null> {
 }
 
 function runSelectedScript(scriptName: string): number {
-  console.log(`\n[tasks] yarn run ${scriptName} を実行します。\n`);
+  console.log(`\n[launcher] yarn run ${scriptName} を実行します。\n`);
 
   const result = spawnSync("corepack", ["yarn", "run", scriptName], {
     cwd: projectRoot,
@@ -376,7 +376,7 @@ async function main(): Promise<void> {
 
   const entries = loadScripts();
   if (entries.length === 0) {
-    console.error("[tasks] package.json に実行可能な scripts が見つかりません。");
+    console.error("[launcher] package.json に実行可能な scripts が見つかりません。");
     process.exit(1);
   }
 
@@ -389,7 +389,7 @@ async function main(): Promise<void> {
   const refreshAndRender = (): void => {
     items = flattenVisibleItems(root, expanded);
     if (items.length === 0) {
-      console.error("[tasks] 表示可能なコマンドがありません。");
+      console.error("[launcher] 表示可能なコマンドがありません。");
       process.exit(1);
     }
     if (selectedIndex >= items.length) {
@@ -424,7 +424,7 @@ async function main(): Promise<void> {
     stopRawInput();
     const status = runSelectedScript(scriptName);
     if (status !== 0) {
-      console.error(`[tasks] yarn run ${scriptName} は終了コード ${status} で終了しました。`);
+      console.error(`[launcher] yarn run ${scriptName} は終了コード ${status} で終了しました。`);
     }
     startRawInput();
     refreshAndRender();
@@ -437,7 +437,7 @@ async function main(): Promise<void> {
       if (selected) {
         const status = runSelectedScript(selected);
         if (status !== 0) {
-          console.error(`[tasks] yarn run ${selected} は終了コード ${status} で終了しました。`);
+          console.error(`[launcher] yarn run ${selected} は終了コード ${status} で終了しました。`);
         }
       }
     } finally {
@@ -508,7 +508,7 @@ async function main(): Promise<void> {
     }
   };
 
-  console.log(`[tasks] ${entries.length} 件のコマンドを読み込みました。`);
+  console.log(`[launcher] ${entries.length} 件のコマンドを読み込みました。`);
   startRawInput();
   refreshAndRender();
 
@@ -526,6 +526,6 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`[tasks] failed: ${message}`);
+  console.error(`[launcher] failed: ${message}`);
   process.exit(1);
 });

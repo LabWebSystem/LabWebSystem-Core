@@ -1,11 +1,13 @@
 #!/usr/bin/env -S node --enable-source-maps
 
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { confirm } from "@inquirer/prompts";
 
 type ComposeKey = "core" | "proxy" | "dns";
-type CommandHandler = () => void;
+type CommandHandler = () => void | Promise<void>;
 
 interface RunOptions {
   env?: NodeJS.ProcessEnv;
@@ -13,11 +15,16 @@ interface RunOptions {
 
 const thisFile = fileURLToPath(import.meta.url);
 const projectRoot = path.resolve(path.dirname(thisFile), "..", "..");
+const backendEnvPath = path.join(projectRoot, "core", "backend", ".env");
 
 const composeFiles: Record<ComposeKey, string> = {
   core: "infra/compose/docker-compose.dev.yml",
   proxy: "infra/compose/docker-compose.proxy.yml",
   dns: "infra/compose/docker-compose.dns.yml"
+};
+
+const coreComposeEnv: NodeJS.ProcessEnv = {
+  LAB_CORE_HOST_PROJECT_ROOT: projectRoot
 };
 
 const labEnv: NodeJS.ProcessEnv = {
@@ -52,87 +59,56 @@ function ensureGeneratedFiles(options: RunOptions = {}): void {
   runTsScript("scripts/dev/ensure-generated-files.ts", [], options);
 }
 
-const commands: Record<string, CommandHandler> = {
-  dev: () => commands["dev:kernel:up"](),
-  "dev:local": () => run("corepack", ["yarn", "workspace", "@lab-core/backend", "dev"]),
-  "dev:backend": () => run("corepack", ["yarn", "workspace", "@lab-core/backend", "dev"]),
-  "dev:dashboard": () => run("corepack", ["yarn", "workspace", "@lab-core/dashboard", "dev"]),
-  "dev:core:deps": () =>
-    runCompose("core", ["run", "--rm", "deps"], {
-      env: { LAB_CORE_HOST_PROJECT_ROOT: projectRoot }
-    }),
-  "dev:core:up": () => {
-    ensureGeneratedFiles();
-    commands["dev:core:deps"]();
-    runCompose("core", ["up", "-d", "backend", "dashboard"], {
-      env: { LAB_CORE_HOST_PROJECT_ROOT: projectRoot }
-    });
-  },
-  "dev:core:down": () =>
-    runCompose("core", ["down"], {
-      env: { LAB_CORE_HOST_PROJECT_ROOT: projectRoot }
-    }),
-  "dev:core:logs": () =>
-    runCompose("core", ["logs", "-f", "backend", "dashboard"], {
-      env: { LAB_CORE_HOST_PROJECT_ROOT: projectRoot }
-    }),
-  "dev:kernel:logs": () => runTsScript("scripts/dev/stream-kernel-logs.ts"),
-  "dev:kernel:up": () => {
-    commands["dev:core:up"]();
-    commands["dev:proxy"]();
-    commands["dev:dns"]();
-  },
-  "dev:kernel:down": () => {
-    commands["dev:dns:down"]();
-    commands["dev:proxy:down"]();
-    commands["dev:core:down"]();
-  },
-  "lab:up": () => commands["dev:kernel:up:lab"](),
-  "lab:down": () => commands["dev:kernel:down:lab"](),
-  "lab:down-clean": () => {
-    commands["lab:down"]();
-    runTsScript("scripts/maintenance/reset-lab-core.ts", ["--yes"]);
-  },
-  "lab:logs": () => commands["dev:kernel:logs"](),
-  "dev:lab": () => commands["lab:up"](),
-  "dev:lab:down": () => commands["lab:down"](),
-  "dev:lab:logs": () => commands["lab:logs"](),
-  "dev:dns": () => {
-    ensureGeneratedFiles();
-    runCompose("dns", ["up", "-d", "dns"]);
-  },
-  "dev:dns:down": () => runCompose("dns", ["down"]),
-  "dev:dns:logs": () => runCompose("dns", ["logs", "-f", "dns"]),
-  "dev:proxy": () => {
-    ensureGeneratedFiles();
-    runCompose("proxy", ["up", "-d", "proxy"]);
-    runTsScript("scripts/dev/refresh-proxy-networks.ts");
-  },
-  "dev:proxy:refresh": () => {
-    ensureGeneratedFiles();
-    runTsScript("scripts/dev/refresh-proxy-networks.ts");
-    run("docker", ["restart", "labcore-dev-proxy-proxy-1"]);
-  },
-  "dev:proxy:down": () => runCompose("proxy", ["down"]),
-  "dev:proxy:logs": () => runCompose("proxy", ["logs", "-f", "proxy"]),
-  "permissions:repair": () => runTsScript("scripts/dev/repair-managed-permissions.ts"),
-  "maintenance:reset": () => runTsScript("scripts/maintenance/reset-lab-core.ts"),
-  "maintenance:reset:yes": () => runTsScript("scripts/maintenance/reset-lab-core.ts", ["--yes"]),
-  build: () => {
-    run("corepack", ["yarn", "workspace", "@lab-core/backend", "build"]);
-    run("corepack", ["yarn", "workspace", "@lab-core/dashboard", "build"]);
-  },
-  "test:register-fixtures": () => run("bash", ["scripts/testing/register_app_fixtures.sh"]),
-  "test:smoke": () => run("bash", ["scripts/testing/run_full_system_smoke_test.sh"]),
-  "config:init": () => runTsScript("scripts/config/env-wizard.ts", ["init"]),
-  "config:reset": () => runTsScript("scripts/config/env-wizard.ts", ["reset"]),
-  "dev:kernel:up:lab": () => {
-    runWithEnv(labEnv, () => commands["dev:kernel:up"]());
-  },
-  "dev:kernel:down:lab": () => {
-    runWithEnv(labEnv, () => commands["dev:kernel:down"]());
-  }
-};
+function coreDeps(options: RunOptions = {}): void {
+  runCompose("core", ["run", "--rm", "deps"], {
+    env: { ...coreComposeEnv, ...(options.env ?? {}) }
+  });
+}
+
+function coreUp(options: RunOptions = {}): void {
+  ensureGeneratedFiles(options);
+  coreDeps(options);
+  runCompose("core", ["up", "-d", "backend", "dashboard"], {
+    env: { ...coreComposeEnv, ...(options.env ?? {}) }
+  });
+}
+
+function coreDown(options: RunOptions = {}): void {
+  runCompose("core", ["down"], {
+    env: { ...coreComposeEnv, ...(options.env ?? {}) }
+  });
+}
+
+function proxyUp(options: RunOptions = {}): void {
+  ensureGeneratedFiles(options);
+  runCompose("proxy", ["up", "-d", "proxy"], options);
+  runTsScript("scripts/dev/refresh-proxy-networks.ts", [], options);
+}
+
+function proxyDown(options: RunOptions = {}): void {
+  runCompose("proxy", ["down"], options);
+}
+
+function dnsUp(options: RunOptions = {}): void {
+  ensureGeneratedFiles(options);
+  runCompose("dns", ["up", "-d", "dns"], options);
+}
+
+function dnsDown(options: RunOptions = {}): void {
+  runCompose("dns", ["down"], options);
+}
+
+function kernelUp(options: RunOptions = {}): void {
+  coreUp(options);
+  proxyUp(options);
+  dnsUp(options);
+}
+
+function kernelDown(options: RunOptions = {}): void {
+  dnsDown(options);
+  proxyDown(options);
+  coreDown(options);
+}
 
 function runWithEnv(env: NodeJS.ProcessEnv, fn: () => void): void {
   const previousValues: Record<string, string | undefined> = {};
@@ -154,10 +130,55 @@ function runWithEnv(env: NodeJS.ProcessEnv, fn: () => void): void {
   }
 }
 
+async function runConfigCommand(): Promise<void> {
+  if (!fs.existsSync(backendEnvPath)) {
+    runTsScript("scripts/config/env-wizard.ts", ["init"]);
+    return;
+  }
+
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    console.error("[config] core/backend/.env が存在するため、reset実行にはTTYが必要です。");
+    console.error("[config] ターミナルで再実行してください。");
+    process.exit(1);
+  }
+
+  const proceed = await confirm({
+    message: "core/backend/.env が存在します。設定を再作成（reset）しますか？",
+    default: false
+  });
+
+  if (!proceed) {
+    console.log("[config] 中止しました。既存 .env は変更していません。");
+    return;
+  }
+
+  runTsScript("scripts/config/env-wizard.ts", ["reset"], {
+    env: { LAB_CORE_ENV_WIZARD_SKIP_EXISTING_CONFIRM: "1" }
+  });
+}
+
+const commands: Record<string, CommandHandler> = {
+  "environment:dev:up": () => kernelUp(),
+  "environment:dev:down": () => kernelDown(),
+  "environment:dev:logs": () => runTsScript("scripts/dev/stream-kernel-logs.ts"),
+  "environment:lab:up": () => runWithEnv(labEnv, () => kernelUp({ env: labEnv })),
+  "environment:lab:down": () => runWithEnv(labEnv, () => kernelDown({ env: labEnv })),
+  "environment:lab:logs": () => runTsScript("scripts/dev/stream-kernel-logs.ts"),
+  "service:backend:up": () => run("corepack", ["yarn", "workspace", "@lab-core/backend", "dev"]),
+  "service:dashboard:up": () => run("corepack", ["yarn", "workspace", "@lab-core/dashboard", "dev"]),
+  "quality:build": () => {
+    run("corepack", ["yarn", "workspace", "@lab-core/backend", "build"]);
+    run("corepack", ["yarn", "workspace", "@lab-core/dashboard", "build"]);
+  },
+  "quality:typecheck:scripts": () => run("corepack", ["yarn", "tsc", "-p", "tsconfig.scripts.json"]),
+  "quality:test:fixtures": () => run("bash", ["scripts/testing/register_app_fixtures.sh"]),
+  "quality:test:smoke": () => run("bash", ["scripts/testing/run_full_system_smoke_test.sh"]),
+  config: () => runConfigCommand(),
+  destroy: () => runTsScript("scripts/maintenance/reset-lab-core.ts")
+};
+
 function printUsageAndExit(): never {
-  const names = Object.keys(commands)
-    .filter((name) => !name.endsWith(":lab"))
-    .sort((a, b) => a.localeCompare(b));
+  const names = Object.keys(commands).sort((a, b) => a.localeCompare(b));
 
   console.error("Usage: yarn <command>");
   console.error("Available commands:");
@@ -172,10 +193,10 @@ if (!commandName || !(commandName in commands)) {
   printUsageAndExit();
 }
 
-try {
-  commands[commandName]();
-} catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`[root-command] failed: ${message}`);
-  process.exit(1);
-}
+Promise.resolve()
+  .then(() => commands[commandName]())
+  .catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[root-command] failed: ${message}`);
+    process.exit(1);
+  });

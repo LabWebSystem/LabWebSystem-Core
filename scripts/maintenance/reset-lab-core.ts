@@ -6,6 +6,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { confirm } from "@inquirer/prompts";
 
 const argv = new Set(process.argv.slice(2));
 const executeReset = argv.has("--yes");
@@ -332,8 +333,21 @@ if (!isSafeTarget(config.generatedSyncDir) || !isSafeTarget(config.appsRoot) || 
 if (!executeReset) {
   console.log(previewLines.join("\n"));
   console.log("");
-  console.log("Run with --yes to execute the reset.");
-  process.exit(0);
+
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    console.log("Non-interactive mode detected. Re-run with --yes to execute the reset.");
+    process.exit(0);
+  }
+
+  const proceed = await confirm({
+    message: "上記の内容で環境クリーンを実行しますか？（破壊的操作です）",
+    default: false
+  });
+
+  if (!proceed) {
+    console.log("中止しました。環境は変更していません。");
+    process.exit(0);
+  }
 }
 
 if (runningPorts.length > 0 && !force) {
