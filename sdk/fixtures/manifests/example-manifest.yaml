@@ -1,0 +1,21 @@
+schemaVersion: 1
+app:
+  name: example
+repository:
+  url: https://github.com/example/example.git
+  defaultBranch: main
+deployment:
+  composePath: docker-compose.yml
+  mode: standard
+  keepVolumesOnRebuild: true
+exposure:
+  service: web
+  port: 8080
+  hostname: example.fukaya-sus.lab
+devices:
+  required: []
+env:
+  required: []
+  defaults: {}
+profiles:
+  default: dev-sim

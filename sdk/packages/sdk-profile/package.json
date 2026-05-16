@@ -1,0 +1,21 @@
+{
+  "name": "@lab-core/sdk-profile",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "yarn exec tsc -p tsconfig.json",
+    "test": "node --test dist/tests/*.test.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@lab-core/sdk-contract": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

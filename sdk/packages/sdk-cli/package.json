@@ -1,0 +1,31 @@
+{
+  "name": "@lab-core/sdk-cli",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/src/main.js",
+  "types": "dist/src/main.d.ts",
+  "bin": {
+    "labcore": "bin/labcore.js"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "build": "yarn exec tsc -p tsconfig.json",
+    "precli": "yarn build",
+    "cli": "node bin/labcore.js",
+    "test": "node --test dist/tests/*.test.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@lab-core/sdk-ci": "workspace:*",
+    "@lab-core/sdk-contract": "workspace:*",
+    "@lab-core/sdk-inspect": "workspace:*",
+    "@lab-core/sdk-profile": "workspace:*",
+    "@lab-core/sdk-seed": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

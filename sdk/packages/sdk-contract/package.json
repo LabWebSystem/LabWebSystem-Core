@@ -1,0 +1,22 @@
+{
+  "name": "@lab-core/sdk-contract",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "yarn exec tsc -p tsconfig.json",
+    "test": "node --test dist/tests/*.test.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "yaml": "^2.8.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

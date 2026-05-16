@@ -983,6 +983,71 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@lab-core/sdk-ci@workspace:*, @lab-core/sdk-ci@workspace:sdk/packages/sdk-ci":
+  version: 0.0.0-use.local
+  resolution: "@lab-core/sdk-ci@workspace:sdk/packages/sdk-ci"
+  dependencies:
+    typescript: "npm:^6.0.3"
+  languageName: unknown
+  linkType: soft
+
+"@lab-core/sdk-cli@workspace:sdk/packages/sdk-cli":
+  version: 0.0.0-use.local
+  resolution: "@lab-core/sdk-cli@workspace:sdk/packages/sdk-cli"
+  dependencies:
+    "@lab-core/sdk-ci": "workspace:*"
+    "@lab-core/sdk-contract": "workspace:*"
+    "@lab-core/sdk-inspect": "workspace:*"
+    "@lab-core/sdk-profile": "workspace:*"
+    "@lab-core/sdk-seed": "workspace:*"
+    typescript: "npm:^6.0.3"
+  bin:
+    labcore: bin/labcore.js
+  languageName: unknown
+  linkType: soft
+
+"@lab-core/sdk-contract@workspace:*, @lab-core/sdk-contract@workspace:sdk/packages/sdk-contract":
+  version: 0.0.0-use.local
+  resolution: "@lab-core/sdk-contract@workspace:sdk/packages/sdk-contract"
+  dependencies:
+    typescript: "npm:^6.0.3"
+    yaml: "npm:^2.8.2"
+    zod: "npm:^3.25.76"
+  languageName: unknown
+  linkType: soft
+
+"@lab-core/sdk-inspect@workspace:*, @lab-core/sdk-inspect@workspace:sdk/packages/sdk-inspect":
+  version: 0.0.0-use.local
+  resolution: "@lab-core/sdk-inspect@workspace:sdk/packages/sdk-inspect"
+  dependencies:
+    typescript: "npm:^6.0.3"
+    yaml: "npm:^2.8.2"
+  languageName: unknown
+  linkType: soft
+
+"@lab-core/sdk-monorepo@workspace:sdk":
+  version: 0.0.0-use.local
+  resolution: "@lab-core/sdk-monorepo@workspace:sdk"
+  languageName: unknown
+  linkType: soft
+
+"@lab-core/sdk-profile@workspace:*, @lab-core/sdk-profile@workspace:sdk/packages/sdk-profile":
+  version: 0.0.0-use.local
+  resolution: "@lab-core/sdk-profile@workspace:sdk/packages/sdk-profile"
+  dependencies:
+    "@lab-core/sdk-contract": "workspace:*"
+    typescript: "npm:^6.0.3"
+  languageName: unknown
+  linkType: soft
+
+"@lab-core/sdk-seed@workspace:*, @lab-core/sdk-seed@workspace:sdk/packages/sdk-seed":
+  version: 0.0.0-use.local
+  resolution: "@lab-core/sdk-seed@workspace:sdk/packages/sdk-seed"
+  dependencies:
+    typescript: "npm:^6.0.3"
+  languageName: unknown
+  linkType: soft
+
 "@protobufjs/aspromise@npm:^1.1.1, @protobufjs/aspromise@npm:^1.1.2":
   version: 1.1.2
   resolution: "@protobufjs/aspromise@npm:1.1.2"

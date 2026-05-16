@@ -1,0 +1,32 @@
+name: labcore-sdk-check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  dev-sim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn labcore lint --profile dev-sim
+      - run: yarn labcore preflight --profile dev-sim
+
+  prod-guard:
+    runs-on: ubuntu-latest
+    needs: [dev-sim]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn labcore guard prod
+      - run: yarn labcore export --profile prod --out build/labcore-payload.json

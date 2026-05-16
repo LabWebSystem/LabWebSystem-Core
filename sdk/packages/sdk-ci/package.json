@@ -1,0 +1,19 @@
+{
+  "name": "@lab-core/sdk-ci",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "scripts": {
+    "build": "yarn exec tsc -p tsconfig.json",
+    "test": "node --test dist/tests/*.test.js",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}
