@@ -7,8 +7,11 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "node scripts/workspace-runner.mjs build",
-    "test": "node scripts/workspace-runner.mjs test",
-    "clean": "node scripts/workspace-runner.mjs clean"
+    "build": "tsx scripts/workspace-runner.ts build",
+    "test": "tsx scripts/workspace-runner.ts test",
+    "clean": "tsx scripts/workspace-runner.ts clean"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.0"
   }
 }

@@ -1028,6 +1028,8 @@ __metadata:
 "@lab-core/sdk-monorepo@workspace:sdk":
   version: 0.0.0-use.local
   resolution: "@lab-core/sdk-monorepo@workspace:sdk"
+  dependencies:
+    tsx: "npm:^4.22.0"
   languageName: unknown
   linkType: soft
 

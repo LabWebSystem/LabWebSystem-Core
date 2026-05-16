@@ -1,11 +1,16 @@
-#!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 
-const action = process.argv[2];
-if (!action) {
-  console.error("usage: node scripts/workspace-runner.mjs <build|test|clean>");
+type Action = "build" | "test" | "clean";
+
+const actionArg = process.argv[2];
+const allowedActions: Action[] = ["build", "test", "clean"];
+
+if (!actionArg || !allowedActions.includes(actionArg as Action)) {
+  console.error("usage: tsx scripts/workspace-runner.ts <build|test|clean>");
   process.exit(2);
 }
+
+const action = actionArg as Action;
 
 const packageOrder = [
   "@lab-core/sdk-contract",
