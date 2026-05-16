@@ -102,10 +102,15 @@
 
 ### 4.3 生成される最小ファイルセット
 - `docker-compose.yml`
+- `docker-compose.dev.yml`（擬似デバイス・テストデータ用オーバーレイ）
+- `docker-compose.prod.yml`（本番固定設定）
 - `Dockerfile`
 - `.dockerignore`
 - `.env.example`
 - `labcore.app.yaml`（SDK専用マニフェスト）
+- `labcore/profiles/dev-sim.yaml`（開発/検証プロファイル）
+- `labcore/profiles/prod.yaml`（本番プロファイル）
+- `labcore/seeds/`（テストデータ導入スクリプト）
 - `README.md`（Lab-Core登録手順を自動埋め込み）
 
 ### 4.4 CLIの理想UX
@@ -121,10 +126,53 @@
 - 次点は SDK 側で同等ロジックを持ち、互換テストでズレを監視
 - 可能なら `POST /api/applications/import/compose-inspect` をSDKから直接叩く「リモート検証モード」も提供
 
+### 4.6 開発/本番の安全分離キット（今回追記）
+- 目的:
+  - Lab-Core が DB 等を提供しない前提で、アプリ単体起動・単体検証を標準化する
+  - 専用デバイス必須アプリでも、擬似デバイスやテストデータで開発を継続できるようにする
+  - 本番配備時に dev 用設定が混入しないよう機械的に防止する
+
+- SDKの追加構成:
+  1. `@lab-core/sdk-profile`
+  - `dev-sim`, `dev-real-device`, `prod` のプロファイル定義とマージルール
+  - `labcore.app.yaml` と各 profile を合成し、最終 compose/env/device 要件を生成
+
+  2. `@lab-core/sdk-device-adapter`
+  - デバイス依存機能を `real` / `mock` で切り替えるインターフェース雛形を提供
+  - 例: NFC/USB をモック実装へ差し替え、CIでも起動可能にする
+
+  3. `@lab-core/sdk-seed`
+  - `labcore seed apply --profile dev-sim` で最小テストデータ投入
+  - `labcore seed verify` で起動後の必須データ存在を検証
+
+- CLI拡張:
+  - `labcore dev up --profile dev-sim`
+  - `labcore test integration --profile dev-sim`
+  - `labcore export --profile prod`（Lab-Core登録用payload/manifestを出力）
+  - `labcore guard prod`（本番安全性チェック）
+
+- `labcore guard prod` の必須チェック:
+  - mock 用サービス/環境変数（例: `*_MOCK=true`）が残っていない
+  - 開発専用 compose override が本番出力に混入していない
+  - 必須デバイス要件と `deviceRequirements` が一致している
+  - 本番必須環境変数が未設定でない
+
+- CIの推奨二段構成:
+  1. `dev-sim` 検証:
+  - `lint` / `inspect` / `preflight` / `integration test` をハードウェア無しで実行
+  2. `prod` 検証:
+  - `guard prod` / `export --profile prod` / compose 構成整合チェックを実行
+
+- 運用上の効果:
+  - 作成者交代時でも「まず dev-sim で動かす」共通手順を持てる
+  - デバイス未接続環境でも最低限の回帰試験を継続できる
+  - 本番配備前に危険設定を落とせるため、開発と本番の切り分けが明確になる
+
 ## 5. 実装優先度（提案）
 1. まず `sdk-cli lint/preflight` を先行実装（失敗削減効果が大きい）
-2. 次に `sdk-contract + manifest` を導入（設定の明示化）
-3. 最後に `init テンプレ` と `CIバッジ` を整備（新規開発者導線の最適化）
+2. 次に `sdk-contract + sdk-profile` を導入（開発/本番の設定分離を明示化）
+3. 続いて `sdk-device-adapter + sdk-seed` を整備（単体テスト継続性の確保）
+4. 最後に `init テンプレ` と `CIバッジ` を整備（新規開発者導線の最適化）
 
 ## 6. 参照した主な実装
 - `core/backend/src/routes/applications.ts`
