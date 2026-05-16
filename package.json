@@ -42,6 +42,5 @@
     "test:smoke": "bash scripts/testing/run_full_system_smoke_test.sh",
     "config:init": "node scripts/config/env-wizard.mjs init",
     "config:reset": "node scripts/config/env-wizard.mjs reset"
-  },
-  "packageManager": "yarn@4.13.0"
+  }
 }
