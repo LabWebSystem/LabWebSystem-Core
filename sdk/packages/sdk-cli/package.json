@@ -16,7 +16,8 @@
     "precli": "yarn build",
     "cli": "node bin/labcore.js",
     "test": "node --test dist/tests/*.test.js",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepack": "yarn build"
   },
   "dependencies": {
     "@lab-core/sdk-ci": "workspace:*",

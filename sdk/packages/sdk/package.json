@@ -1,5 +1,5 @@
 {
-  "name": "@lab-core/sdk-seed",
+  "name": "@lab-core/sdk",
   "version": "0.0.1",
   "type": "module",
   "main": "dist/src/index.js",
@@ -18,6 +18,12 @@
     "test": "node --test dist/tests/*.test.js",
     "clean": "rm -rf dist",
     "prepack": "yarn build"
+  },
+  "dependencies": {
+    "@lab-core/sdk-contract": "workspace:*",
+    "@lab-core/sdk-inspect": "workspace:*",
+    "@lab-core/sdk-profile": "workspace:*",
+    "@lab-core/sdk-seed": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^6.0.3"

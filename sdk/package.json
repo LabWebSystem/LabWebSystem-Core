@@ -7,8 +7,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "yarn workspace @lab-core/sdk-contract build && yarn workspace @lab-core/sdk-inspect build && yarn workspace @lab-core/sdk-profile build && yarn workspace @lab-core/sdk-seed build && yarn workspace @lab-core/sdk-ci build && yarn workspace @lab-core/sdk-cli build",
-    "test": "yarn workspace @lab-core/sdk-contract test && yarn workspace @lab-core/sdk-inspect test && yarn workspace @lab-core/sdk-profile test && yarn workspace @lab-core/sdk-seed test && yarn workspace @lab-core/sdk-ci test && yarn workspace @lab-core/sdk-cli test",
-    "clean": "yarn workspace @lab-core/sdk-contract clean && yarn workspace @lab-core/sdk-inspect clean && yarn workspace @lab-core/sdk-profile clean && yarn workspace @lab-core/sdk-seed clean && yarn workspace @lab-core/sdk-ci clean && yarn workspace @lab-core/sdk-cli clean"
+    "build": "yarn workspace @lab-core/sdk-contract build && yarn workspace @lab-core/sdk-inspect build && yarn workspace @lab-core/sdk-profile build && yarn workspace @lab-core/sdk-seed build && yarn workspace @lab-core/sdk-ci build && yarn workspace @lab-core/sdk build && yarn workspace @lab-core/sdk-cli build",
+    "test": "yarn workspace @lab-core/sdk-contract test && yarn workspace @lab-core/sdk-inspect test && yarn workspace @lab-core/sdk-profile test && yarn workspace @lab-core/sdk-seed test && yarn workspace @lab-core/sdk-ci test && yarn workspace @lab-core/sdk test && yarn workspace @lab-core/sdk-cli test",
+    "clean": "yarn workspace @lab-core/sdk-contract clean && yarn workspace @lab-core/sdk-inspect clean && yarn workspace @lab-core/sdk-profile clean && yarn workspace @lab-core/sdk-seed clean && yarn workspace @lab-core/sdk-ci clean && yarn workspace @lab-core/sdk clean && yarn workspace @lab-core/sdk-cli clean"
   }
 }
