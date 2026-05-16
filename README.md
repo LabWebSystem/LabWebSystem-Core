@@ -1,82 +1,62 @@
 # Lab-Core v3
 
-研究室向け統合 Web アプリ配信・運用基盤の再構築リポジトリです。
+研究室向け統合 Web アプリ配信・運用基盤のリポジトリです。
 
 ## 構成
 - `core/backend`: Hono + TypeScript + SQLite の API サーバー
 - `core/dashboard`: React + Vite の運用ダッシュボード
-- `infra/compose`: 開発用 compose 定義
+- `infra/compose`: backend / dashboard / proxy / DNS の compose 定義
+- `scripts`: 起動・設定・品質確認・保守用スクリプト
 
 ## 前提依存関係
-
 - Node.js: `22.x` 推奨
-  - `2026-05-16` 時点の確認では、`Node 24` で `yarn install` 実行時に `better-sqlite3` のネイティブビルド失敗を確認
-- Yarn: `corepack yarn` を使用（script は `corepack yarn` 前提）
+  - `2026-05-16` 時点で `Node 24` は `better-sqlite3` ビルド失敗を確認
+- Yarn: `corepack yarn`（`packageManager: yarn@4.14.1`）
 - Docker Engine
 - Docker Compose v2（`docker compose`）
 - Git
 
 補足:
-- ホストで `yarn install` を直接実行する場合、環境によっては `better-sqlite3` ビルドのために `make` / `gcc-c++` / `python3` が必要です。
+- 環境によっては `yarn install` 時に `make` / `gcc-c++` / `python3` が必要です。
 
-## 開発開始
+## クイックスタート
 1. `yarn install`
-2. 初回設定ウィザード: `yarn config:init`
-3. ローカル開発なら `yarn dev`
+2. `yarn config`
+3. 開発: `yarn environment:dev:up`
+4. 研究室運用: `yarn environment:lab:up`
+5. `http://dashboard.<LAB_CORE_ROOT_DOMAIN>/` を開く
 
-## インストレーション要約
+## 公開コマンド（現行）
+- ランチャー: `yarn launcher`
+- 設定: `yarn config`
+- 一括起動/停止/ログ（開発）:
+  - `yarn environment:dev:up`
+  - `yarn environment:dev:down`
+  - `yarn environment:dev:logs`
+- 一括起動/停止/ログ（研究室運用）:
+  - `yarn environment:lab:up`
+  - `yarn environment:lab:down`
+  - `yarn environment:lab:logs`
+- 個別起動:
+  - `yarn service:backend:up`
+  - `yarn service:dashboard:up`
+- 品質確認:
+  - `yarn quality:build`
+  - `yarn quality:typecheck:scripts`
+  - `yarn quality:test:fixtures`
+  - `yarn quality:test:smoke`
+- 破壊的クリーンアップ（確認付き）:
+  - `yarn destroy`
 
-### ローカル開発（localhost / `lab.localhost`）
-
-1. `yarn install`
-2. `yarn config:init`
-3. プロファイルで `local` を選ぶ
-4. `yarn dev`
-5. `http://dashboard.lab.localhost/` を開く
-
-詳細手順:
-- `docs/lab_core_system_documentation/setup_localhost.md`
-
-### 本番環境（`192.168.11.224` / `fukaya-sus.lab`）
-
-1. 本番ホストへリポジトリを配置
-2. `yarn install`
-3. `yarn config:init`
-4. プロファイルで `lab` を選ぶ
-5. `yarn lab:up`
-
-6. `http://dashboard.fukaya-sus.lab/` を開く
-
-詳細手順:
-- `docs/lab_core_system_documentation/setup_production_192.168.11.224.md`
-
-## 補足
-
-- `yarn dev` は kernel 相当の起動を行い、backend / dashboard / proxy / DNS をまとめて立ち上げます。
-- 本番向けの起動は `yarn lab:up` / `yarn lab:down` を使います。
-- `.env` を残して runtime / DB / generated / 管理下 Docker 資産を初期化したい時は `yarn lab:down-clean` を使います。
-  このコマンドは先に `yarn lab:down` を実行してから初期化します。
-  runtime 配下で動く登録済みアプリの compose project も停止・削除対象です。
-- 本番のログ確認は `yarn lab:logs` を使うと backend / dashboard / proxy / DNS をまとめて追えます。
-- API の主確認先は `http://api.<LAB_CORE_ROOT_DOMAIN>/api` です。
-- 旧来の個別起動も必要なら利用できます。
-  - `yarn dev:backend`
-  - `yarn dev:dashboard`
-
-## 検証コマンド
-- ビルド確認: `yarn build`
-- 登録テスト値投入: `yarn test:register-fixtures`
-- 網羅スモークテスト: `yarn test:smoke`
-
-## 設定コマンド
-- 設定を対話形式で作成: `yarn config:init`
-- 設定を安全に再作成: `yarn config:reset`
+## 注意事項
+- `quality:test:smoke` は現状 `scripts/testing/run_full_system_smoke_test.sh` 内に旧コマンド参照が残っており、環境によっては修正が必要です。
+- `.env` 再作成時はバックアップが自動作成されます。
 
 ## ドキュメント
-- 総合ドキュメント入口: `docs/lab_core_system_documentation/index.md`
-- ローカル開発セットアップ: `docs/lab_core_system_documentation/setup_localhost.md`
-- 本番セットアップ: `docs/lab_core_system_documentation/setup_production_192.168.11.224.md`
-- kernel 構成案: `docs/lab_core_system_documentation/kernel_architecture.md`
-- ダッシュボード詳細マニュアル: `docs/lab_core_system_documentation/user_manual.md`
-- 既存の操作説明書: `docs/readmes/how_to_use_lab_core.md`
-- 適合アプリ作成ガイド: `docs/lab_core_app_repository_guide/app_repository_creation_guide.md`
+- docs 入口: `docs/README.md`
+- 正式仕様（現行実装準拠）:
+  - `docs/20260516_230913_公式仕様統合/official_specification.md`
+- 操作説明（簡易）:
+  - `docs/readmes/how_to_use_lab_core.md`
+- 適合アプリ作成ガイド:
+  - `docs/lab_core_app_repository_guide/app_repository_creation_guide.md`

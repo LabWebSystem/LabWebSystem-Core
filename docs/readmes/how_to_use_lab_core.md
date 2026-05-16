@@ -1,206 +1,98 @@
-# Lab-Core v3 使い方（説明書）
+# Lab-Core 使い方（現行実装準拠）
 
 補足:
-- 要件・仕様・機能・使い方・トラブル対応をまとめた総合資料は `docs/lab_core_system_documentation/index.md` を参照してください。
+- 正式仕様は `docs/20260516_230913_公式仕様統合/official_specification.md` を参照してください。
 
 ## 1. この説明書の対象
-この説明書は、研究室メンバーが Lab-Core v3 を使ってアプリを追加・確認・復旧するための手順書です。
+この説明書は、研究室メンバーが Lab-Core でアプリを登録・確認・復旧するための操作手順です。
 
-## 2. 開発環境の起動
-1. リポジトリルートで `yarn install`
-2. 対話型設定: `yarn config:init`
-3. 標準起動: `yarn dev`
-4. ブラウザで `http://dashboard.<LAB_CORE_ROOT_DOMAIN>/` を開く
+## 2. 起動手順
+1. `yarn install`
+2. `yarn config`
+3. 開発環境: `yarn environment:dev:up`
+4. 研究室運用: `yarn environment:lab:up`
+5. ブラウザで `http://dashboard.<LAB_CORE_ROOT_DOMAIN>/` を開く
 
-補足:
-- backend は `core/backend/.env` を起動時に自動読込します。
-- 詳細な初期設定は `docs/lab_core_system_documentation/setup_localhost.md` と `docs/lab_core_system_documentation/setup_production_192.168.11.224.md` を参照してください。
-- 設定を初期化したい場合は `yarn config:reset` を使用してください。
-- 開発データと起動中コンテナをまとめて初期化したい場合は `yarn maintenance:reset` を使い、確認後に `yarn maintenance:reset:yes` を実行してください。
+停止:
+- 開発環境: `yarn environment:dev:down`
+- 研究室運用: `yarn environment:lab:down`
+
+ログ:
+- 開発環境: `yarn environment:dev:logs`
+- 研究室運用: `yarn environment:lab:logs`
 
 ## 3. 画面の見方
-- `登録アプリ`: 現在登録済みのアプリ数
-- `稼働中`: 正常稼働アプリ数
-- `不安定`: 要確認アプリ数
-- `失敗`: 起動や処理で失敗しているアプリ数
-- `実行モード`: `dry-run` か `execute`
+### 3.1 ホーム
+- `登録アプリ`
+- `稼働中`
+- `不安定`
+- `失敗`
+- `実行モード`（`dry-run` / `execute`）
 
-## 4. アプリを追加する
-1. 「アプリ登録」フォームに入力
-2. 「登録して配備キューに追加」を押す
-3. 一覧に反映されたら、状態とイベントを確認
+### 3.2 アプリ一覧
+- 現在の一覧画面で主操作は `詳細へ` です。
+- 再起動・再ビルド・更新・削除・ログ確認は **アプリ詳細画面** で実行します。
 
-### 入力項目
-- アプリ名
-- Git URL
-- サブドメイン
-- 公開サービス名
-- 公開ポート
-- モード（Standard/Headless）
-- デバイス要件（必要時）
-
-## 5. 登録テスト値（Phase 3）
-### 画面から使う手順
-1. 「登録テスト値」からシナリオを選ぶ
-2. 「テスト値を入力」を押す
-3. フォームに値が入ったことを確認して登録する
+## 4. アプリを登録する
+1. `アプリ登録` タブを開く
+2. GitHub URL を入力して解析
+3. ブランチ確認
+4. compose候補を選択
+5. 公開サービス候補を選択
+6. アプリ名/ホスト名/公開ポートなどを入力
+7. `登録して配備キューに追加` を押す
 
 補足:
-- 同名衝突を避けるため、`テスト値を入力` 時にアプリ名とサブドメインへ時刻サフィックスを自動付与します。
-- これにより、同じシナリオを連続実行しやすくなります。
+- 登録後はアプリ詳細へ遷移し、ジョブ進行を確認できます。
 
-### 用意されているテスト値
-- `OruCa想定 (NFCあり)`
-  - mode: `standard`
-  - publicServiceName: `oruca-web`
-  - publicPort: `80`
-  - deviceRequirements: `/dev/bus/usb`
-- `シンプルWeb`
-  - mode: `standard`
-  - publicServiceName: `web`
-  - publicPort: `3000`
-- `Headless API`
-  - mode: `headless`
-  - publicServiceName: `api`
-  - publicPort: `8080`
+## 5. アプリ詳細での運用操作
+アプリ詳細画面で次の操作ができます。
+- `停止` / `再開`
+- `再起動`
+- `再ビルド`
+- `更新確認`
+- `更新適用`
+- `ロールバック`
+- `ログ確認`
+- `削除`
 
-### CLI から一括登録テスト
-- 3種類を連続で登録する: `yarn test:register-fixtures`
-- 接続先変更（例）: `bash scripts/testing/register_app_fixtures.sh http://127.0.0.1:7300`
-- 網羅スモークテスト（推奨）: `yarn test:smoke`
-
-## 6. 運用操作
-### 再起動
-- 一覧の「再起動」ボタンを押す
-- 成功/失敗はイベント欄で確認
-
-### 再ビルド
-- 一覧の「再ビルド」ボタンを押す
-- 現状はデータ保持モードで実行される
-
-### 更新確認
-- 一覧の「更新確認」ボタンを押す
-- `更新あり/最新` の表示を確認
-
-### 更新適用（Phase 5）
-1. 一覧の「更新適用」を押す
-2. 更新ジョブが開始されることを確認する
-3. 成功時はイベント欄の完了メッセージを確認する
-
-### 1世代ロールバック（Phase 5）
-1. 一覧で `prev` に値があるアプリを選ぶ
-2. 「ロールバック」を押す
-3. ロールバックジョブが開始・完了することを確認する
-
-補足:
-- `prev` が空のアプリはロールバックできません。
-- `dry-run` は疑似コミットでロールバック導線のみ確認できます。
-
-### ログ確認（Phase 4）
-1. 一覧の「ログ」を押す
-2. 必要に応じて「サービス」と「表示行数」を切り替える
-3. 自動スクロールを ON/OFF しながらエラー行を確認する
-
-補足:
-- `dry-run` ではイベント由来の疑似ログを表示します。
-- `execute` では `docker compose logs` の実ログを表示します。
-
-### DNS/Proxy 同期
-- 右上の「DNS/Proxy 同期」を押す
-- 同期結果はイベントに記録される
-
-## 7. 削除フロー（Phase 3）
-1. 一覧の「削除」を押す
-2. 削除モードを選ぶ
-   - `構成のみ削除`
-   - `構成 + ソース削除`
-   - `構成 + ソース + データ削除`
-3. 確認用アプリ名に対象アプリ名を正確に入力
-4. 「削除ジョブを開始」を押す
-
-注意:
-- 確認用アプリ名が一致しない場合、削除は実行されません。
-- `構成 + ソース + データ削除` は元に戻せないため、実行前に必ず確認してください。
-
-## 8. 障害時の基本導線
+障害時の基本導線:
 1. 再起動
-2. イベント確認
-3. 再ビルド
-4. （必要なら）削除・再登録
+2. 進行状況とエラー確認
+3. ログ確認
+4. 再ビルド
+5. 必要に応じて削除・再登録
 
-## 9. 実行モードについて
-- `dry-run`: Docker/Git 実処理をスキップして操作フロー確認
-- `execute`: Docker/Git を実際に実行
+## 6. ログ確認
+1. アプリ詳細で `ログ確認` を開く
+2. サービスを選択
+3. 表示行数（100/200/500/1000）を調整
+4. 必要なら `ログ更新`
 
-`.env` 例（backend）:
-- `LAB_CORE_EXECUTION_MODE=execute`
-- `LAB_CORE_APPS_ROOT=./runtime/apps`
-- `LAB_CORE_APPDATA_ROOT=./runtime/appdata`
+補足:
+- `dry-run`: イベント由来の疑似ログ
+- `execute`: `docker compose logs` の実ログ
 
-### 設定ファイルを安全に作る方法（推奨）
-1. `yarn config:init` を実行
-2. プロファイル（local/lab/vm）を選択
-3. 各項目の説明を読み、必要なら値を変更
-4. 保存確認で `yes` を入力
+## 7. 削除手順
+1. アプリ詳細の削除セクションを開く
+2. 削除モードを選択
+   - `config_only`
+   - `source_and_config`
+   - `full`
+3. 確認用アプリ名を正確に入力
+4. `削除ジョブを開始`
 
-`yarn config:init` / `yarn config:reset` の特徴:
-- すべての項目に「用途」「役割」「設定例」の説明が表示されます
-- Enter だけで推奨値を採用できます
-- 上書き時は `core/backend/.env.backup.<timestamp>` を自動作成します
+## 8. 品質確認コマンド
+- ビルド: `yarn quality:build`
+- scripts 型検証: `yarn quality:typecheck:scripts`
+- 登録フィクスチャ投入: `yarn quality:test:fixtures`
+- スモークテスト: `yarn quality:test:smoke`
 
-### 実コンテナ起動の確認手順（execute）
-1. `core/backend/.env.example` を基に `.env` を作り、`LAB_CORE_EXECUTION_MODE=execute` に設定する
-2. Docker が起動していることを確認する（例: `docker ps`）
-3. `yarn dev:backend` と `yarn dev:dashboard` を起動する
-4. テスト値でアプリ登録し、ジョブが `succeeded` になることを確認する
-5. ホスト側で `docker ps` を実行し、対象コンテナが起動していることを確認する
+## 9. 既知注意点
+- `quality:test:smoke` は現状、内部スクリプトに旧コマンド参照が残っており、そのままでは失敗する場合があります。
+- 設定は `yarn config` を使用し、旧 `config:init` / `config:reset` は使いません。
 
-## 10. ユーザーテスト手順（毎回の確認用）
-### テストA: 基本起動
-1. `yarn install`
-2. `yarn dev:backend`
-3. `yarn dev:dashboard`
-4. ダッシュボードを開き、メトリクスが表示されることを確認
-
-### テストB: テスト値でアプリ登録
-1. 「登録テスト値」で `シンプルWeb` を選択
-2. 「テスト値を入力」を押す
-3. 「登録して配備キューに追加」を押す
-4. 一覧に追加され、イベントに登録完了が出ることを確認
-
-### テストC: 一括登録
-1. バックエンド起動状態で `yarn test:register-fixtures` を実行
-2. アプリ一覧に3件追加されることを確認
-3. イベントに deploy ジョブ開始/完了が出ることを確認
-
-### テストD: 運用操作
-1. 任意アプリで「再起動」を押す
-2. 「再ビルド」を押す
-3. 「更新確認」を押す
-4. それぞれイベントが増えることを確認
-
-### テストE: 更新適用とロールバック
-1. 任意アプリで「更新確認」を押して `更新あり` を確認
-2. 「更新適用」を押し、更新ジョブが成功することを確認
-3. `prev` が表示されたことを確認
-4. 「ロールバック」を押し、ロールバックジョブが成功することを確認
-
-### テストF: ログ確認
-1. 任意アプリで「ログ」を押す
-2. 「サービス」を切り替えてログが再取得されることを確認
-3. 「表示行数」を 100/500 に変更して表示量が変わることを確認
-4. エラー文字列を含む行が強調されることを確認
-
-### テストG: 削除確認
-1. 任意アプリで「削除」を押す
-2. 間違った確認名を入力して実行し、ブロックされることを確認
-3. 正しい確認名を入力し、削除ジョブが開始されることを確認
-
-### テストH: DNS/Proxy 同期
-1. 右上の「DNS/Proxy 同期」を押す
-2. `core/backend/data/generated/Caddyfile` が更新されることを確認
-3. `core/backend/data/generated/fukaya-sus.hosts` が更新されることを確認
-
-## 11. 今後追記予定
-- OruCa 受け入れ手順（実機 NFC / Slack）
-- 本番運用（systemd / Caddy / dnsmasq）手順
+## 10. 参考資料
+- 正式仕様: `docs/20260516_230913_公式仕様統合/official_specification.md`
+- docs 入口: `docs/README.md`
+- 適合アプリ作成ガイド: `docs/lab_core_app_repository_guide/app_repository_creation_guide.md`
