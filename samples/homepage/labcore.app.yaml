@@ -1,0 +1,22 @@
+schemaVersion: 1
+app:
+  name: homepage-sample
+  description: Timer TODO sample with web/api/db containers
+repository:
+  url: https://github.com/example/homepage-sample.git
+  defaultBranch: main
+deployment:
+  composePath: docker-compose.yml
+  mode: standard
+  keepVolumesOnRebuild: true
+exposure:
+  service: web
+  port: 4173
+  hostname: homepage.fukaya-sus.lab
+devices:
+  required: []
+env:
+  required: []
+  defaults: {}
+profiles:
+  default: dev-sim
