@@ -7,6 +7,18 @@
 - `core/dashboard`: React + Vite の運用ダッシュボード
 - `infra/compose`: 開発用 compose 定義
 
+## 前提依存関係
+
+- Node.js: `22.x` 推奨
+  - `2026-05-16` 時点の確認では、`Node 24` で `yarn install` 実行時に `better-sqlite3` のネイティブビルド失敗を確認
+- Yarn: `corepack yarn` を使用（script は `corepack yarn` 前提）
+- Docker Engine
+- Docker Compose v2（`docker compose`）
+- Git
+
+補足:
+- ホストで `yarn install` を直接実行する場合、環境によっては `better-sqlite3` ビルドのために `make` / `gcc-c++` / `python3` が必要です。
+
 ## 開発開始
 1. `yarn install`
 2. 初回設定ウィザード: `yarn config:init`
