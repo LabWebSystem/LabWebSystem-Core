@@ -275,122 +275,130 @@ function checkPortOpen(port: number, host = "127.0.0.1"): Promise<boolean> {
   });
 }
 
-const envValues = await loadDotEnv(envPath);
-const config = {
-  apiPort: Number(envValues.LAB_CORE_PORT ?? 7300),
-  dbPath: toAbsolutePath(envValues.LAB_CORE_DB_PATH, "./core/backend/data/database.sqlite"),
-  generatedSyncDir: toAbsolutePath(envValues.LAB_CORE_SYNC_DIR, "./core/backend/data/generated"),
-  appsRoot: toAbsolutePath(envValues.LAB_CORE_APPS_ROOT, "./runtime/apps"),
-  appDataRoot: toAbsolutePath(envValues.LAB_CORE_APPDATA_ROOT, "./runtime/appdata")
-};
+async function main(): Promise<void> {
+  const envValues = await loadDotEnv(envPath);
+  const config = {
+    apiPort: Number(envValues.LAB_CORE_PORT ?? 7300),
+    dbPath: toAbsolutePath(envValues.LAB_CORE_DB_PATH, "./core/backend/data/database.sqlite"),
+    generatedSyncDir: toAbsolutePath(envValues.LAB_CORE_SYNC_DIR, "./core/backend/data/generated"),
+    appsRoot: toAbsolutePath(envValues.LAB_CORE_APPS_ROOT, "./runtime/apps"),
+    appDataRoot: toAbsolutePath(envValues.LAB_CORE_APPDATA_ROOT, "./runtime/appdata")
+  };
 
-const dbArtifacts = [config.dbPath, `${config.dbPath}-wal`, `${config.dbPath}-shm`];
-const composeStacks = [
-  ["-f", "infra/compose/docker-compose.proxy.yml", "down", "--remove-orphans"],
-  ["-f", "infra/compose/docker-compose.dns.yml", "down", "--remove-orphans"],
-  ["-f", "infra/compose/docker-compose.dev.yml", "down", "--remove-orphans"]
-];
-const runningPorts: string[] = [];
+  const dbArtifacts = [config.dbPath, `${config.dbPath}-wal`, `${config.dbPath}-shm`];
+  const composeStacks = [
+    ["-f", "infra/compose/docker-compose.proxy.yml", "down", "--remove-orphans"],
+    ["-f", "infra/compose/docker-compose.dns.yml", "down", "--remove-orphans"],
+    ["-f", "infra/compose/docker-compose.dev.yml", "down", "--remove-orphans"]
+  ];
+  const runningPorts: string[] = [];
 
-if (await checkPortOpen(config.apiPort)) {
-  runningPorts.push(`backend port ${config.apiPort}`);
-}
-if (await checkPortOpen(5173)) {
-  runningPorts.push("dashboard port 5173");
-}
-
-const helperProjects = listLabCoreProjects();
-const runtimeProjects = listRuntimeComposeProjects(config.appsRoot);
-const projects = listUnique([...helperProjects, ...runtimeProjects]);
-const containerIds = listUnique(projects.flatMap((projectName) => listProjectContainers(projectName)));
-const networkIds = listUnique(projects.flatMap((projectName) => listProjectNetworks(projectName)));
-const volumeNames = listUnique(projects.flatMap((projectName) => listProjectVolumes(projectName)));
-
-const previewLines = [
-  "Lab-Core reset preview",
-  `- DB artifacts: ${dbArtifacts.join(", ")}`,
-  `- Generated dir: ${config.generatedSyncDir}`,
-  `- Runtime apps dir: ${config.appsRoot}`,
-  `- Runtime data dir: ${config.appDataRoot}`,
-  `- Docker compose helper stacks: ${composeStacks.length}`,
-  `- Docker compose helper projects: ${helperProjects.length > 0 ? helperProjects.join(", ") : "(none)"}`,
-  `- Runtime app projects: ${runtimeProjects.length > 0 ? runtimeProjects.join(", ") : "(none)"}`,
-  `- Docker containers to remove: ${containerIds.length}`,
-  `- Docker networks to remove: ${networkIds.length}`,
-  `- Docker volumes to remove: ${volumeNames.length}`,
-  "- Preserved: core/backend/.env, node_modules, git worktree"
-];
-
-if (runningPorts.length > 0) {
-  previewLines.push(`- Warning: stop these listeners first if possible: ${runningPorts.join(", ")}`);
-}
-
-if (!isSafeTarget(config.generatedSyncDir) || !isSafeTarget(config.appsRoot) || !isSafeTarget(config.appDataRoot)) {
-  console.error("reset refused: one or more configured paths are unsafe");
-  process.exit(1);
-}
-
-if (!executeReset) {
-  console.log(previewLines.join("\n"));
-  console.log("");
-
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    console.log("Non-interactive mode detected. Re-run with --yes to execute the reset.");
-    process.exit(0);
+  if (await checkPortOpen(config.apiPort)) {
+    runningPorts.push(`backend port ${config.apiPort}`);
+  }
+  if (await checkPortOpen(5173)) {
+    runningPorts.push("dashboard port 5173");
   }
 
-  const proceed = await confirm({
-    message: "上記の内容で環境クリーンを実行しますか？（破壊的操作です）",
-    default: false
-  });
+  const helperProjects = listLabCoreProjects();
+  const runtimeProjects = listRuntimeComposeProjects(config.appsRoot);
+  const projects = listUnique([...helperProjects, ...runtimeProjects]);
+  const containerIds = listUnique(projects.flatMap((projectName) => listProjectContainers(projectName)));
+  const networkIds = listUnique(projects.flatMap((projectName) => listProjectNetworks(projectName)));
+  const volumeNames = listUnique(projects.flatMap((projectName) => listProjectVolumes(projectName)));
 
-  if (!proceed) {
-    console.log("中止しました。環境は変更していません。");
-    process.exit(0);
+  const previewLines = [
+    "Lab-Core reset preview",
+    `- DB artifacts: ${dbArtifacts.join(", ")}`,
+    `- Generated dir: ${config.generatedSyncDir}`,
+    `- Runtime apps dir: ${config.appsRoot}`,
+    `- Runtime data dir: ${config.appDataRoot}`,
+    `- Docker compose helper stacks: ${composeStacks.length}`,
+    `- Docker compose helper projects: ${helperProjects.length > 0 ? helperProjects.join(", ") : "(none)"}`,
+    `- Runtime app projects: ${runtimeProjects.length > 0 ? runtimeProjects.join(", ") : "(none)"}`,
+    `- Docker containers to remove: ${containerIds.length}`,
+    `- Docker networks to remove: ${networkIds.length}`,
+    `- Docker volumes to remove: ${volumeNames.length}`,
+    "- Preserved: core/backend/.env, node_modules, git worktree"
+  ];
+
+  if (runningPorts.length > 0) {
+    previewLines.push(`- Warning: stop these listeners first if possible: ${runningPorts.join(", ")}`);
   }
+
+  if (!isSafeTarget(config.generatedSyncDir) || !isSafeTarget(config.appsRoot) || !isSafeTarget(config.appDataRoot)) {
+    console.error("reset refused: one or more configured paths are unsafe");
+    process.exit(1);
+  }
+
+  if (!executeReset) {
+    console.log(previewLines.join("\n"));
+    console.log("");
+
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      console.log("Non-interactive mode detected. Re-run with --yes to execute the reset.");
+      process.exit(0);
+    }
+
+    const proceed = await confirm({
+      message: "上記の内容で環境クリーンを実行しますか？（破壊的操作です）",
+      default: false
+    });
+
+    if (!proceed) {
+      console.log("中止しました。環境は変更していません。");
+      process.exit(0);
+    }
+  }
+
+  if (runningPorts.length > 0 && !force) {
+    console.error(previewLines.join("\n"));
+    console.error("");
+    console.error("reset aborted: stop the running dev servers first, or re-run with --force");
+    process.exit(1);
+  }
+
+  for (const args of composeStacks) {
+    dockerComposeSuccess(args);
+  }
+
+  if (containerIds.length > 0) {
+    dockerSuccess(["rm", "-f", ...containerIds]);
+  }
+
+  for (const networkId of networkIds) {
+    dockerSuccess(["network", "rm", networkId]);
+  }
+
+  for (const volumeName of volumeNames) {
+    dockerSuccess(["volume", "rm", "-f", volumeName]);
+  }
+
+  for (const dbArtifact of dbArtifacts) {
+    await removeFileIfExists(dbArtifact);
+  }
+
+  await clearDirectoryContents(config.generatedSyncDir);
+  await clearDirectoryContents(config.appsRoot);
+  await clearDirectoryContents(config.appDataRoot);
+
+  const summaryLines = [
+    "Lab-Core reset completed",
+    `- Removed DB artifacts: ${dbArtifacts.length}`,
+    `- Cleared generated dir: ${config.generatedSyncDir}`,
+    `- Cleared runtime apps dir: ${config.appsRoot}`,
+    `- Cleared runtime data dir: ${config.appDataRoot}`,
+    `- Removed Docker containers: ${containerIds.length}`,
+    `- Removed Docker networks: ${networkIds.length}`,
+    `- Removed Docker volumes: ${volumeNames.length}`,
+    "- Preserved: core/backend/.env"
+  ];
+
+  console.log(summaryLines.join("\n"));
 }
 
-if (runningPorts.length > 0 && !force) {
-  console.error(previewLines.join("\n"));
-  console.error("");
-  console.error("reset aborted: stop the running dev servers first, or re-run with --force");
+void main().catch((error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`[reset-lab-core] failed: ${message}`);
   process.exit(1);
-}
-
-for (const args of composeStacks) {
-  dockerComposeSuccess(args);
-}
-
-if (containerIds.length > 0) {
-  dockerSuccess(["rm", "-f", ...containerIds]);
-}
-
-for (const networkId of networkIds) {
-  dockerSuccess(["network", "rm", networkId]);
-}
-
-for (const volumeName of volumeNames) {
-  dockerSuccess(["volume", "rm", "-f", volumeName]);
-}
-
-for (const dbArtifact of dbArtifacts) {
-  await removeFileIfExists(dbArtifact);
-}
-
-await clearDirectoryContents(config.generatedSyncDir);
-await clearDirectoryContents(config.appsRoot);
-await clearDirectoryContents(config.appDataRoot);
-
-const summaryLines = [
-  "Lab-Core reset completed",
-  `- Removed DB artifacts: ${dbArtifacts.length}`,
-  `- Cleared generated dir: ${config.generatedSyncDir}`,
-  `- Cleared runtime apps dir: ${config.appsRoot}`,
-  `- Cleared runtime data dir: ${config.appDataRoot}`,
-  `- Removed Docker containers: ${containerIds.length}`,
-  `- Removed Docker networks: ${networkIds.length}`,
-  `- Removed Docker volumes: ${volumeNames.length}`,
-  "- Preserved: core/backend/.env"
-];
-
-console.log(summaryLines.join("\n"));
+});
