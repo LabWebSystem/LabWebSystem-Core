@@ -45,21 +45,30 @@ export type ApplicationListItem = {
   current_commit: string | null;
   previous_commit: string | null;
   status: string;
+  created_at: string;
   hostname: string;
   public_port: number;
   public_service_name: string;
   mode: "standard" | "headless";
+  enabled?: boolean;
   has_update: boolean;
   updated_at: string;
   latest_error_title?: string | null;
   latest_error_message?: string | null;
   latest_error_at?: string | null;
   latest_job_type?: string | null;
-  latest_job_status?: "queued" | "running" | "succeeded" | "failed" | null;
+  latest_job_status?: "queued" | "running" | "succeeded" | "failed" | "cancelled" | null;
   latest_job_message?: string | null;
   latest_job_created_at?: string | null;
   latest_job_started_at?: string | null;
   latest_job_finished_at?: string | null;
+  active_job_id?: string | null;
+  active_job_type?: string | null;
+  active_job_status?: "queued" | "running" | null;
+  active_job_message?: string | null;
+  active_job_created_at?: string | null;
+  active_job_started_at?: string | null;
+  health?: ApplicationHealthCheck | null;
 };
 
 export type SystemEvent = {
@@ -219,6 +228,7 @@ export type ApplicationLogsResponse = {
 export type ApplicationDeployment = {
   deployment_id: string;
   compose_path: string;
+  compose_project_name: string | null;
   public_service_name: string;
   public_port: number;
   hostname: string;
@@ -255,6 +265,40 @@ export type ApplicationUpdateInfo = {
 
 export type ApplicationComposeInspection = ComposeInspectionPayload;
 
+export type ApplicationHealthCheck = {
+  state: "healthy" | "slow" | "page_error" | "runtime_error" | "unreachable" | "pending" | "stopped" | "unknown";
+  severity: "ok" | "warning" | "critical" | "inactive" | "unknown";
+  summary: string;
+  checked_at: string;
+  url: string | null;
+  http_status: number | null;
+  response_time_ms: number | null;
+  reachable: boolean | null;
+  container_summary: {
+    total: number;
+    healthy: number;
+    warning: number;
+    critical: number;
+    unknown: number;
+  };
+  detail: string | null;
+};
+
+export type ApplicationJob = {
+  job_id: string;
+  type: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  started_at: string | null;
+  finished_at: string | null;
+  message: string | null;
+  related_application_id: string | null;
+  created_at: string;
+  application_name?: string | null;
+  request_payload?: Record<string, unknown>;
+  retryable?: boolean;
+  cancellable?: boolean;
+};
+
 export type ApplicationDetail = {
   application: {
     application_id: string;
@@ -269,11 +313,13 @@ export type ApplicationDetail = {
     updated_at: string;
   };
   deployment: ApplicationDeployment | null;
+  health: ApplicationHealthCheck | null;
   composeInspection: ApplicationComposeInspection | null;
   routes: ApplicationRoute[];
   containers: ApplicationContainerInstance[];
   updateInfo: ApplicationUpdateInfo | null;
   events: SystemEvent[];
+  jobs: ApplicationJob[];
 };
 
 export type UpdateDeploymentPayload = {

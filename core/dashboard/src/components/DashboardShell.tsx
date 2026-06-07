@@ -28,8 +28,8 @@ export function DashboardShell(props: DashboardShellProps) {
       <header className="topbar card-surface">
         <div className="topbar-main">
           <p className="eyebrow">LAB-CORE v3</p>
-          <h1>配信基盤ダッシュボード</h1>
-          <p className="topbar-sub">操作を分かりやすく分離した、MPA風の運用UIです。</p>
+          <h1>運用ダッシュボード</h1>
+          <p className="topbar-sub">アプリ状態、ジョブ進行、エラー履歴を一つの画面系で追える運用 UI です。</p>
           {executionMode ? (
             <p className="mode-chip">実行モード: {executionMode === "dry-run" ? "dry-run" : "execute"}</p>
           ) : null}

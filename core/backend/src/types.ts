@@ -22,8 +22,9 @@ export type JobType =
   | "resume"
   | "rebuild"
   | "delete"
+  | "update-check"
   | "update"
   | "rollback"
   | "restart";
 
-export type JobStatus = "queued" | "running" | "succeeded" | "failed";
+export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";

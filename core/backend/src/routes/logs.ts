@@ -17,7 +17,7 @@ logsRouter.get("/:applicationId/services", async (c) => {
     return c.json({ applicationId, services });
   } catch (error) {
     const message = error instanceof Error ? error.message : "ログ対象サービスの取得に失敗しました。";
-    if (message.includes("配備情報")) {
+    if (message.includes("配備情報") || message.includes("デプロイ情報")) {
       return c.json({ message }, 404);
     }
     return c.json({ message: "ログ対象サービスの取得に失敗しました。", detail: message }, 500);
@@ -41,7 +41,7 @@ logsRouter.get("/:applicationId", async (c) => {
     return c.json(snapshot);
   } catch (error) {
     const message = error instanceof Error ? error.message : "ログ取得に失敗しました。";
-    if (message.includes("配備情報")) {
+    if (message.includes("配備情報") || message.includes("デプロイ情報")) {
       return c.json({ message }, 404);
     }
     return c.json({ message: "ログ取得に失敗しました。", detail: message }, 500);

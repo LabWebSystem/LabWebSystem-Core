@@ -1,6 +1,7 @@
 import type {
   ApplicationComposeInspection,
   ApplicationDetail,
+  ApplicationJob,
   ApplicationListItem,
   ApplicationLogsResponse,
   CreateApplicationResponse,
@@ -88,6 +89,11 @@ export async function fetchApplications(): Promise<ApplicationListItem[]> {
 export async function fetchEvents(limit = 50): Promise<SystemEvent[]> {
   const response = await requestJson<{ events: SystemEvent[] }>(`/api/events?limit=${limit}`);
   return response.events;
+}
+
+export async function fetchJobs(limit = 80): Promise<ApplicationJob[]> {
+  const response = await requestJson<{ jobs: ApplicationJob[] }>(`/api/jobs?limit=${limit}`);
+  return response.jobs;
 }
 
 export async function createApplication(payload: CreateApplicationPayload): Promise<CreateApplicationResponse> {
@@ -190,6 +196,18 @@ export async function deleteApplication(applicationId: string, mode: DeleteMode)
   await requestJson(`/api/applications/${applicationId}`, {
     method: "DELETE",
     body: JSON.stringify({ mode })
+  });
+}
+
+export async function retryJob(jobId: string): Promise<void> {
+  await requestJson(`/api/jobs/${jobId}/retry`, {
+    method: "POST"
+  });
+}
+
+export async function cancelJob(jobId: string): Promise<void> {
+  await requestJson(`/api/jobs/${jobId}/cancel`, {
+    method: "POST"
   });
 }
 

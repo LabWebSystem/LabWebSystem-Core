@@ -28,6 +28,7 @@ export function applySchema(db: Database.Database): void {
       deployment_id TEXT PRIMARY KEY,
       application_id TEXT NOT NULL UNIQUE,
       compose_path TEXT NOT NULL,
+      compose_project_name TEXT,
       public_service_name TEXT NOT NULL,
       public_port INTEGER NOT NULL,
       hostname TEXT NOT NULL UNIQUE,
@@ -88,6 +89,7 @@ export function applySchema(db: Database.Database): void {
       started_at TEXT,
       finished_at TEXT,
       message TEXT,
+      request_payload TEXT NOT NULL DEFAULT '{}',
       related_application_id TEXT,
       created_at TEXT NOT NULL,
       FOREIGN KEY(related_application_id) REFERENCES applications(application_id) ON DELETE SET NULL
@@ -99,4 +101,6 @@ export function applySchema(db: Database.Database): void {
   `);
 
   ensureColumn(db, "deployments", "env_overrides", "TEXT NOT NULL DEFAULT '{}'");
+  ensureColumn(db, "deployments", "compose_project_name", "TEXT");
+  ensureColumn(db, "jobs", "request_payload", "TEXT NOT NULL DEFAULT '{}'");
 }

@@ -110,8 +110,9 @@ export function ImportView(props: ImportViewProps) {
       <section className="panel-card import-card">
         <div className="panel-head">
           <div>
+            <p className="section-kicker">NEW APP</p>
             <h2>GitHub からアプリ登録</h2>
-            <p className="panel-sub">上から順に進めるウィザード形式で登録します。</p>
+            <p className="panel-sub">URL 解析、manifest 確認、compose 解析、登録内容の確定までを一画面で進めます。</p>
           </div>
         </div>
 
@@ -119,7 +120,7 @@ export function ImportView(props: ImportViewProps) {
           <section className="step-section">
             <p className="step-index">STEP 1</p>
             <h3>GitHub URL を入力</h3>
-            <p className="panel-sub">`/tree/&lt;branch&gt;` URL または `.git` URL を指定します。</p>
+            <p className="panel-sub">`/tree/&lt;branch&gt;` URL または `.git` URL を指定できます。</p>
 
             <label>
               GitHub URL
@@ -391,8 +392,9 @@ export function ImportView(props: ImportViewProps) {
               </p>
 
               <button type="submit" className="button primary" disabled={loading}>
-                登録して配備キューに追加
+                アプリを追加する
               </button>
+              <p className="hint">追加後はアプリ一覧へ戻り、準備中の状態と関連ジョブをすぐ確認できます。</p>
             </section>
           ) : (
             <section className="step-section locked">

@@ -7,6 +7,8 @@ import { simpleGit } from "simple-git";
 import { z } from "zod";
 import { db, nowIso } from "../lib/db.js";
 import { env } from "../lib/env.js";
+import { executeUpdateCheckJob } from "../services/application-update-check.js";
+import { assessApplicationHealth } from "../services/application-health.js";
 import {
   executeDeleteJob,
   executeDeployJob,
@@ -40,9 +42,10 @@ import {
   parseLabcoreManifest,
   type LabcoreManifest
 } from "../services/import-manifest.js";
+import { buildComposeProjectName } from "../services/compose-project.js";
 import { recordEvent } from "../services/events.js";
 import { syncInfrastructure } from "../services/infrastructure-sync.js";
-import { createJob, finishJob, startJob } from "../services/jobs.js";
+import { createJobWithPayload, getActiveJobForApplication } from "../services/jobs.js";
 
 const createApplicationSchema = z.object({
   name: z.string().min(2).max(80),
@@ -118,6 +121,7 @@ const insertDeploymentStatement = db.prepare(`
     deployment_id,
     application_id,
     compose_path,
+    compose_project_name,
     public_service_name,
     public_port,
     hostname,
@@ -126,7 +130,7 @@ const insertDeploymentStatement = db.prepare(`
     device_requirements,
     env_overrides,
     enabled
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const insertRouteStatement = db.prepare(`
@@ -138,21 +142,6 @@ const insertRouteStatement = db.prepare(`
     upstream_port,
     enabled
   ) VALUES (?, ?, ?, ?, ?, ?)
-`);
-
-const upsertUpdateInfoStatement = db.prepare(`
-  INSERT INTO update_info (
-    application_id,
-    current_commit,
-    latest_remote_commit,
-    has_update,
-    checked_at
-  ) VALUES (?, ?, ?, ?, ?)
-  ON CONFLICT(application_id) DO UPDATE SET
-    current_commit = excluded.current_commit,
-    latest_remote_commit = excluded.latest_remote_commit,
-    has_update = excluded.has_update,
-    checked_at = excluded.checked_at
 `);
 
 function parseJsonSafely(value: string): string[] {
@@ -182,6 +171,88 @@ function parseJsonObjectSafely(value: string): Record<string, string> {
   } catch {
     return {};
   }
+}
+
+type ApplicationContainerHealthRow = {
+  application_id: string;
+  health_state: string;
+};
+
+function describeJobType(type: string): string {
+  switch (type) {
+    case "deploy":
+      return "デプロイ";
+    case "restart":
+      return "再起動";
+    case "stop":
+      return "停止";
+    case "resume":
+      return "再開";
+    case "rebuild":
+      return "再ビルド";
+    case "update-check":
+      return "更新確認";
+    case "update":
+      return "更新適用";
+    case "rollback":
+      return "ロールバック";
+    case "delete":
+      return "削除";
+    default:
+      return type;
+  }
+}
+
+function buildActiveJobConflict(applicationId: string) {
+  const activeJob = getActiveJobForApplication(applicationId);
+  if (!activeJob) {
+    return null;
+  }
+
+  const phase = activeJob.status === "running" ? "実行中" : "実行待ち";
+  return {
+    message: `現在は ${describeJobType(activeJob.type)} ジョブが${phase}のため、この操作はまだ実行できません。`,
+    activeJob
+  };
+}
+
+async function buildHealthMap(applicationIds: string[], rows: Array<Record<string, unknown>>) {
+  if (applicationIds.length === 0) {
+    return new Map<string, Awaited<ReturnType<typeof assessApplicationHealth>>>();
+  }
+
+  const containerRows = db
+    .prepare(
+      `
+        SELECT application_id, health_state
+        FROM container_instances
+        WHERE application_id IN (${applicationIds.map(() => "?").join(", ")})
+      `
+    )
+    .all(...applicationIds) as ApplicationContainerHealthRow[];
+
+  const groupedContainers = new Map<string, ApplicationContainerHealthRow[]>();
+  for (const row of containerRows) {
+    const bucket = groupedContainers.get(row.application_id) ?? [];
+    bucket.push(row);
+    groupedContainers.set(row.application_id, bucket);
+  }
+
+  const evaluations = await Promise.all(
+    rows.map(async (row) => {
+      const applicationId = String(row.application_id);
+      const health = await assessApplicationHealth({
+        status: String(row.status ?? "unknown"),
+        hostname: typeof row.hostname === "string" ? row.hostname : null,
+        enabled: Boolean(row.enabled),
+        containers: groupedContainers.get(applicationId) ?? []
+      });
+
+      return [applicationId, health] as const;
+    })
+  );
+
+  return new Map(evaluations);
 }
 
 type ParsedGithubImportSource = {
@@ -738,7 +809,7 @@ async function inspectComposeFromRepository(
 
 export const applicationsRouter = new Hono();
 
-applicationsRouter.get("/", (c) => {
+applicationsRouter.get("/", async (c) => {
   const applications = db
     .prepare(
       `
@@ -828,7 +899,55 @@ applicationsRouter.get("/", (c) => {
             WHERE j.related_application_id = a.application_id
             ORDER BY j.created_at DESC
             LIMIT 1
-          ) AS latest_job_finished_at
+          ) AS latest_job_finished_at,
+          (
+            SELECT j.job_id
+            FROM jobs j
+            WHERE j.related_application_id = a.application_id
+              AND j.status IN ('queued', 'running')
+            ORDER BY j.created_at ASC
+            LIMIT 1
+          ) AS active_job_id,
+          (
+            SELECT j.type
+            FROM jobs j
+            WHERE j.related_application_id = a.application_id
+              AND j.status IN ('queued', 'running')
+            ORDER BY j.created_at ASC
+            LIMIT 1
+          ) AS active_job_type,
+          (
+            SELECT j.status
+            FROM jobs j
+            WHERE j.related_application_id = a.application_id
+              AND j.status IN ('queued', 'running')
+            ORDER BY j.created_at ASC
+            LIMIT 1
+          ) AS active_job_status,
+          (
+            SELECT j.message
+            FROM jobs j
+            WHERE j.related_application_id = a.application_id
+              AND j.status IN ('queued', 'running')
+            ORDER BY j.created_at ASC
+            LIMIT 1
+          ) AS active_job_message,
+          (
+            SELECT j.created_at
+            FROM jobs j
+            WHERE j.related_application_id = a.application_id
+              AND j.status IN ('queued', 'running')
+            ORDER BY j.created_at ASC
+            LIMIT 1
+          ) AS active_job_created_at,
+          (
+            SELECT j.started_at
+            FROM jobs j
+            WHERE j.related_application_id = a.application_id
+              AND j.status IN ('queued', 'running')
+            ORDER BY j.created_at ASC
+            LIMIT 1
+          ) AS active_job_started_at
         FROM applications a
         LEFT JOIN deployments d ON d.application_id = a.application_id
         LEFT JOIN update_info u ON u.application_id = a.application_id
@@ -837,15 +956,25 @@ applicationsRouter.get("/", (c) => {
     )
     .all() as Array<Record<string, unknown>>;
 
-  const normalized = applications.map((row) => ({
+  const normalizedRows = applications.map((row) => ({
     ...row,
     keep_volumes_on_rebuild: Boolean(row.keep_volumes_on_rebuild),
     enabled: Boolean(row.enabled),
     has_update: Boolean(row.has_update),
     device_requirements: parseJsonSafely(String(row.device_requirements ?? "[]"))
-  }));
+  })) as Array<Record<string, unknown>>;
 
-  return c.json({ applications: normalized });
+  const healthMap = await buildHealthMap(
+    normalizedRows.map((row) => String(row.application_id)),
+    normalizedRows
+  );
+
+  return c.json({
+    applications: normalizedRows.map((row) => ({
+      ...row,
+      health: healthMap.get(String(row.application_id)) ?? null
+    }))
+  });
 });
 
 applicationsRouter.post("/import/resolve", async (c) => {
@@ -993,6 +1122,7 @@ applicationsRouter.get("/:applicationId", async (c) => {
         SELECT
           deployment_id,
           compose_path,
+          compose_project_name,
           public_service_name,
           public_port,
           hostname,
@@ -1009,6 +1139,7 @@ applicationsRouter.get("/:applicationId", async (c) => {
     | {
         deployment_id: string;
         compose_path: string;
+        compose_project_name: string | null;
         public_service_name: string;
         public_port: number;
         hostname: string;
@@ -1054,6 +1185,26 @@ applicationsRouter.get("/:applicationId", async (c) => {
     )
     .all(applicationId);
 
+  const jobs = db
+    .prepare(
+      `
+        SELECT
+          job_id,
+          type,
+          status,
+          started_at,
+          finished_at,
+          message,
+          related_application_id,
+          created_at
+        FROM jobs
+        WHERE related_application_id = ?
+        ORDER BY created_at DESC
+        LIMIT 40
+      `
+    )
+    .all(applicationId);
+
   const updateInfo = db
     .prepare(
       `
@@ -1073,6 +1224,13 @@ applicationsRouter.get("/:applicationId", async (c) => {
         env_overrides: parseJsonObjectSafely(String(deployment.env_overrides ?? "{}"))
       }
     : null;
+
+  const health = await assessApplicationHealth({
+    status: String(application.status),
+    hostname: normalizedDeployment?.hostname ?? null,
+    enabled: normalizedDeployment?.enabled ?? false,
+    containers: containers as ApplicationContainerHealthRow[]
+  });
 
   const composeInspection = normalizedDeployment
     ? await inspectComposeForApplicationRepository(
@@ -1095,11 +1253,13 @@ applicationsRouter.get("/:applicationId", async (c) => {
   return c.json({
     application,
     deployment: normalizedDeployment,
+    health,
     composeInspection,
     routes: normalizedRoutes,
     containers,
     updateInfo: updateInfo ? { ...updateInfo, has_update: Boolean((updateInfo as Record<string, unknown>).has_update) } : null,
-    events
+    events,
+    jobs
   });
 });
 
@@ -1205,7 +1365,12 @@ applicationsRouter.patch("/:applicationId/deployment", async (c) => {
     | undefined;
 
   if (!currentDeployment) {
-    return c.json({ message: "対象アプリの配備設定が見つかりません。" }, 404);
+    return c.json({ message: "対象アプリのデプロイ設定が見つかりません。" }, 404);
+  }
+
+  const blockingJob = buildActiveJobConflict(applicationId);
+  if (blockingJob) {
+    return c.json(blockingJob, 409);
   }
 
   const data = parsed.data;
@@ -1277,7 +1442,7 @@ applicationsRouter.patch("/:applicationId/deployment", async (c) => {
     if (message.includes("UNIQUE")) {
       return c.json({ message: "同じホスト名の設定が既に存在します。" }, 409);
     }
-    return c.json({ message: "配備設定の更新に失敗しました。", detail: message }, 500);
+    return c.json({ message: "デプロイ設定の更新に失敗しました。", detail: message }, 500);
   }
 
   const composeFilePath = path.resolve(repoPath, data.composePath);
@@ -1307,7 +1472,7 @@ applicationsRouter.patch("/:applicationId/deployment", async (c) => {
     scope: "deployment",
     applicationId,
     level: routing.corrected ? "warning" : "info",
-    title: "配備設定を更新しました",
+    title: "デプロイ設定を更新しました",
     message: [
       requestedChanges.length > 0 ? requestedChanges.join(", ") : "設定を保存しました。",
       routing.reason
@@ -1315,7 +1480,7 @@ applicationsRouter.patch("/:applicationId/deployment", async (c) => {
   });
 
   return c.json({
-    message: routing.corrected ? `配備設定を更新しました。${routing.reason}` : "配備設定を更新しました。",
+    message: routing.corrected ? `デプロイ設定を更新しました。${routing.reason}` : "デプロイ設定を更新しました。",
     routing
   });
 });
@@ -1379,6 +1544,7 @@ applicationsRouter.post("/", async (c) => {
   const deploymentId = nanoid();
   const routeId = nanoid();
   const createdAt = nowIso();
+  const composeProjectName = buildComposeProjectName(applicationId, data.name);
 
   const tx = db.transaction(() => {
     insertApplicationStatement.run(
@@ -1398,6 +1564,7 @@ applicationsRouter.post("/", async (c) => {
       deploymentId,
       applicationId,
       data.composePath,
+      composeProjectName,
       data.publicServiceName,
       data.publicPort,
       data.hostname,
@@ -1410,7 +1577,7 @@ applicationsRouter.post("/", async (c) => {
 
     insertRouteStatement.run(routeId, applicationId, data.hostname, data.publicServiceName, data.publicPort, 1);
 
-    const jobId = createJob("deploy", applicationId, "初回デプロイ待機中です。");
+    const jobId = createJobWithPayload("deploy", { trigger: "create" }, applicationId, "初回デプロイ待機中です。");
     recordEvent({
       scope: "application",
       applicationId,
@@ -1457,7 +1624,12 @@ applicationsRouter.post("/:applicationId/restart", async (c) => {
     return c.json({ message: "対象アプリが見つかりません。" }, 404);
   }
 
-  const jobId = createJob("restart", applicationId, "再起動ジョブを作成しました。");
+  const blockingJob = buildActiveJobConflict(applicationId);
+  if (blockingJob) {
+    return c.json(blockingJob, 409);
+  }
+
+  const jobId = createJobWithPayload("restart", { trigger: "manual" }, applicationId, "再起動ジョブを作成しました。");
   void executeRestartJob(applicationId, jobId);
 
   return c.json(
@@ -1491,7 +1663,12 @@ applicationsRouter.post("/:applicationId/stop", async (c) => {
     return c.json({ message: "このアプリは既に停止しています。" }, 400);
   }
 
-  const jobId = createJob("stop", applicationId, "停止ジョブを作成しました。");
+  const blockingJob = buildActiveJobConflict(applicationId);
+  if (blockingJob) {
+    return c.json(blockingJob, 409);
+  }
+
+  const jobId = createJobWithPayload("stop", { trigger: "manual" }, applicationId, "停止ジョブを作成しました。");
   void executeStopJob(applicationId, jobId);
 
   return c.json(
@@ -1525,7 +1702,12 @@ applicationsRouter.post("/:applicationId/resume", async (c) => {
     return c.json({ message: "このアプリは既に公開中です。" }, 400);
   }
 
-  const jobId = createJob("resume", applicationId, "再開ジョブを作成しました。");
+  const blockingJob = buildActiveJobConflict(applicationId);
+  if (blockingJob) {
+    return c.json(blockingJob, 409);
+  }
+
+  const jobId = createJobWithPayload("resume", { trigger: "manual" }, applicationId, "再開ジョブを作成しました。");
   void executeResumeJob(applicationId, jobId);
 
   return c.json(
@@ -1555,7 +1737,12 @@ applicationsRouter.post("/:applicationId/rebuild", async (c) => {
   }
 
   const keepData = parsed.data.keepData;
-  const jobId = createJob("rebuild", applicationId, "再ビルドジョブを作成しました。");
+  const blockingJob = buildActiveJobConflict(applicationId);
+  if (blockingJob) {
+    return c.json(blockingJob, 409);
+  }
+
+  const jobId = createJobWithPayload("rebuild", { keepData, trigger: "manual" }, applicationId, "再ビルドジョブを作成しました。");
   void executeRebuildJob(applicationId, jobId, keepData);
 
   return c.json(
@@ -1585,87 +1772,21 @@ applicationsRouter.post("/:applicationId/update-check", async (c) => {
     return c.json({ message: "対象アプリが見つかりません。" }, 404);
   }
 
-  const jobId = createJob("update", applicationId, "更新確認ジョブを作成しました。");
-  startJob(jobId, "リモートとの差分確認を開始します。");
+  const blockingJob = buildActiveJobConflict(applicationId);
+  if (blockingJob) {
+    return c.json(blockingJob, 409);
+  }
 
-  const repoPath = path.join(env.appsRoot, application.name);
-  if (env.executionMode === "dry-run") {
-    const currentCommit = application.current_commit ?? "dry-run-current";
-    const latestRemoteCommit = `dry-run-remote-${Date.now()}`;
-    const hasUpdate = currentCommit !== latestRemoteCommit;
+  const jobId = createJobWithPayload("update-check", { trigger: "manual" }, applicationId, "更新確認ジョブを作成しました。");
+  void executeUpdateCheckJob(applicationId, jobId);
 
-    upsertUpdateInfoStatement.run(applicationId, currentCommit, latestRemoteCommit, hasUpdate ? 1 : 0, nowIso());
-    finishJob(jobId, "succeeded", hasUpdate ? "更新があります。" : "最新状態です。");
-    recordEvent({
-      scope: "update",
-      applicationId,
-      level: hasUpdate ? "warning" : "info",
-      title: hasUpdate ? "更新があります" : "更新なし",
-      message: hasUpdate
-        ? `remote=${latestRemoteCommit} / current=${currentCommit}`
-        : `最新コミット (${currentCommit}) を確認しました。`
-    });
-
-    return c.json({
+  return c.json(
+    {
       jobId,
-      hasUpdate,
-      currentCommit,
-      latestRemoteCommit
-    });
-  }
-
-  if (!fs.existsSync(repoPath)) {
-    const message = `ローカルリポジトリが見つかりません: ${repoPath}`;
-    finishJob(jobId, "failed", message);
-    recordEvent({
-      scope: "update",
-      applicationId,
-      level: "warning",
-      title: "更新確認に失敗しました",
-      message
-    });
-    return c.json({ message: "更新確認に失敗しました。ローカルソースがありません。", detail: message, jobId }, 400);
-  }
-
-  try {
-    const git = simpleGit(repoPath);
-    await git.fetch();
-
-    const currentCommit = (await git.revparse(["HEAD"])).trim();
-    const latestRemoteCommit = (await git.revparse([`origin/${application.default_branch}`])).trim();
-    const hasUpdate = currentCommit !== latestRemoteCommit;
-
-    upsertUpdateInfoStatement.run(applicationId, currentCommit, latestRemoteCommit, hasUpdate ? 1 : 0, nowIso());
-
-    finishJob(jobId, "succeeded", hasUpdate ? "更新があります。" : "最新状態です。");
-    recordEvent({
-      scope: "update",
-      applicationId,
-      level: hasUpdate ? "warning" : "info",
-      title: hasUpdate ? "更新があります" : "更新なし",
-      message: hasUpdate
-        ? `remote=${latestRemoteCommit} / current=${currentCommit}`
-        : `最新コミット (${currentCommit}) を確認しました。`
-    });
-
-    return c.json({
-      jobId,
-      hasUpdate,
-      currentCommit,
-      latestRemoteCommit
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "不明なエラー";
-    finishJob(jobId, "failed", message);
-    recordEvent({
-      scope: "update",
-      applicationId,
-      level: "error",
-      title: "更新確認に失敗しました",
-      message
-    });
-    return c.json({ message: "更新確認に失敗しました。", detail: message, jobId }, 500);
-  }
+      message: `${application.name} の更新確認ジョブを開始しました。`
+    },
+    202
+  );
 });
 
 applicationsRouter.post("/:applicationId/update", async (c) => {
@@ -1679,7 +1800,12 @@ applicationsRouter.post("/:applicationId/update", async (c) => {
     return c.json({ message: "対象アプリが見つかりません。" }, 404);
   }
 
-  const jobId = createJob("update", applicationId, "更新適用ジョブを作成しました。");
+  const blockingJob = buildActiveJobConflict(applicationId);
+  if (blockingJob) {
+    return c.json(blockingJob, 409);
+  }
+
+  const jobId = createJobWithPayload("update", { trigger: "manual" }, applicationId, "更新適用ジョブを作成しました。");
   void executeUpdateJob(applicationId, jobId);
 
   return c.json(
@@ -1706,7 +1832,12 @@ applicationsRouter.post("/:applicationId/rollback", async (c) => {
     return c.json({ message: "ロールバック可能な1つ前のコミットがありません。" }, 400);
   }
 
-  const jobId = createJob("rollback", applicationId, "ロールバックジョブを作成しました。");
+  const blockingJob = buildActiveJobConflict(applicationId);
+  if (blockingJob) {
+    return c.json(blockingJob, 409);
+  }
+
+  const jobId = createJobWithPayload("rollback", { trigger: "manual" }, applicationId, "ロールバックジョブを作成しました。");
   void executeRollbackJob(applicationId, jobId);
 
   return c.json(
@@ -1735,7 +1866,17 @@ applicationsRouter.delete("/:applicationId", async (c) => {
     return c.json({ message: "対象アプリが見つかりません。" }, 404);
   }
 
-  const jobId = createJob("delete", applicationId, "削除ジョブを作成しました。");
+  const blockingJob = buildActiveJobConflict(applicationId);
+  if (blockingJob) {
+    return c.json(blockingJob, 409);
+  }
+
+  const jobId = createJobWithPayload(
+    "delete",
+    { mode: parsed.data.mode, trigger: "manual" },
+    applicationId,
+    "削除ジョブを作成しました。"
+  );
   void executeDeleteJob(applicationId, jobId, parsed.data.mode);
 
   return c.json(

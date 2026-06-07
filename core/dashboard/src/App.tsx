@@ -1,10 +1,12 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   applyUpdate,
+  cancelJob,
   checkUpdate,
   createApplication,
   deleteApplication,
   fetchApplicationDetail,
+  fetchJobs,
   fetchApplicationLogs,
   fetchApplicationLogServices,
   fetchApplications,
@@ -16,6 +18,7 @@ import {
   resolveImportSource,
   resumeApplication,
   restartApplication,
+  retryJob,
   rollbackApplication,
   stopApplication,
   syncInfrastructure,
@@ -25,6 +28,7 @@ import { DashboardShell, type DashboardView } from "./components/DashboardShell"
 import type {
   ApplicationComposeInspection,
   ApplicationDetail,
+  ApplicationJob,
   ApplicationListItem,
   ComposeEnvironmentRequirement,
   ComposeServiceCandidate,
@@ -265,6 +269,7 @@ export function App() {
 
   const [system, setSystem] = useState<SystemStatus | null>(null);
   const [applications, setApplications] = useState<ApplicationListItem[]>([]);
+  const [jobs, setJobs] = useState<ApplicationJob[]>([]);
   const [events, setEvents] = useState<SystemEvent[]>([]);
   const [detail, setDetail] = useState<ApplicationDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -308,14 +313,16 @@ export function App() {
     }
 
     try {
-      const [systemResponse, applicationsResponse, eventsResponse] = await Promise.all([
+      const [systemResponse, applicationsResponse, eventsResponse, jobsResponse] = await Promise.all([
         fetchSystemStatus(),
         fetchApplications(),
-        fetchEvents(120)
+        fetchEvents(120),
+        fetchJobs(160)
       ]);
       setSystem(systemResponse);
       setApplications(applicationsResponse);
       setEvents(eventsResponse);
+      setJobs(jobsResponse);
       setInitialLoaded(true);
     } catch (error) {
       if (mode !== "background") {
@@ -686,14 +693,15 @@ export function App() {
 
     try {
       const response = await createApplication(payload);
-      setActionMessage("アプリを登録しました。");
+      setActionMessage("アプリを追加しました。アプリ一覧でデプロイ状況を確認できます。");
       setForm(initialImportForm);
       setDeviceRequirementsRaw("");
       setEnvironmentOverrides({});
       setResolveState(initialResolveState);
       setComposeState(initialComposeState);
       await reload({ mode: "action" });
-      openDetail(response.applicationId);
+      setSelectedApplicationId(response.applicationId);
+      setActiveView("apps");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "アプリ登録に失敗しました。");
     } finally {
@@ -928,6 +936,14 @@ export function App() {
     setActiveView("apps");
   }
 
+  async function onRetryJob(jobId: string, typeLabel: string): Promise<void> {
+    await runAction(async () => retryJob(jobId), `${typeLabel} ジョブを再実行しました。`);
+  }
+
+  async function onCancelJob(jobId: string): Promise<void> {
+    await runAction(async () => cancelJob(jobId), "待機中ジョブをキャンセルしました。");
+  }
+
   return (
     <DashboardShell
       activeView={activeView}
@@ -951,14 +967,21 @@ export function App() {
         <HomeView
           system={system}
           applications={applications}
+          jobs={jobs}
           events={events}
           onOpenApplications={() => setActiveView("apps")}
           onOpenDetail={(applicationId) => openDetail(applicationId)}
+          onRetryJob={(jobId, typeLabel) => void onRetryJob(jobId, typeLabel)}
+          onCancelJob={(jobId) => void onCancelJob(jobId)}
         />
       ) : null}
 
       {activeView === "apps" ? (
-        <ApplicationsView applications={applications} onOpenDetail={(applicationId) => openDetail(applicationId)} />
+        <ApplicationsView
+          applications={applications}
+          selectedApplicationId={selectedApplicationId}
+          onOpenDetail={(applicationId) => openDetail(applicationId)}
+        />
       ) : null}
 
       {activeView === "import" ? (
@@ -990,6 +1013,7 @@ export function App() {
         <ApplicationDetailView
           application={selectedApplication}
           detail={detail}
+          jobs={jobs.filter((job) => job.related_application_id === selectedApplication?.application_id)}
           detailLoading={detailLoading}
           loading={busy}
           logs={logs}
@@ -1006,19 +1030,19 @@ export function App() {
           onResetDeployment={resetDeploymentForm}
           onSaveDeployment={() => void saveDeploymentSettings()}
           onStop={(applicationId, applicationName) =>
-            void runAction(async () => stopApplication(applicationId), `${applicationName} を停止しました。`)
+            void runAction(async () => stopApplication(applicationId), `${applicationName} の停止ジョブを開始しました。`)
           }
           onResume={(applicationId, applicationName) =>
-            void runAction(async () => resumeApplication(applicationId), `${applicationName} を再開しました。`)
+            void runAction(async () => resumeApplication(applicationId), `${applicationName} の再開ジョブを開始しました。`)
           }
           onRestart={(applicationId, applicationName) =>
-            void runAction(async () => restartApplication(applicationId), `${applicationName} を再起動しました。`)
+            void runAction(async () => restartApplication(applicationId), `${applicationName} の再起動ジョブを開始しました。`)
           }
           onRebuild={(applicationId, applicationName) =>
-            void runAction(async () => rebuildApplication(applicationId, true), `${applicationName} をデータ保持で再ビルドしました。`)
+            void runAction(async () => rebuildApplication(applicationId, true), `${applicationName} の再ビルドジョブを開始しました。`)
           }
           onCheckUpdate={(applicationId, applicationName) =>
-            void runAction(async () => checkUpdate(applicationId), `${applicationName} の更新確認を完了しました。`)
+            void runAction(async () => checkUpdate(applicationId), `${applicationName} の更新確認ジョブを開始しました。`)
           }
           onApplyUpdate={(applicationId, applicationName) =>
             void runAction(async () => applyUpdate(applicationId), `${applicationName} の更新適用ジョブを開始しました。`)
@@ -1026,6 +1050,8 @@ export function App() {
           onRollback={(applicationId, applicationName) =>
             void runAction(async () => rollbackApplication(applicationId), `${applicationName} のロールバックジョブを開始しました。`)
           }
+          onRetryJob={(jobId, typeLabel) => void onRetryJob(jobId, typeLabel)}
+          onCancelJob={(jobId) => void onCancelJob(jobId)}
           onOpenLogs={(application) => void openLogs(application)}
           onRefreshLogs={(service, tail) => void refreshLogs(service, tail)}
           onSetSelectedLogService={(service) => setLogs((prev) => ({ ...prev, selectedService: service }))}

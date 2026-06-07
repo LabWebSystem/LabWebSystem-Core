@@ -6,7 +6,7 @@ import { env } from "../lib/env.js";
 import type { JobStatus } from "../types.js";
 import { runCommand } from "./command-runner.js";
 import { chooseRecommendedComposeService, inspectComposeYaml } from "./compose-inspection.js";
-import { buildComposeProjectName } from "./compose-project.js";
+import { resolveComposeProjectName } from "./compose-project.js";
 import { recordEvent } from "./events.js";
 import { finishJob, setJobProgress, startJob } from "./jobs.js";
 import { syncInfrastructure } from "./infrastructure-sync.js";
@@ -17,6 +17,7 @@ type AppDeploymentRow = {
   repository_url: string;
   default_branch: string;
   compose_path: string;
+  compose_project_name: string | null;
   public_service_name: string;
   public_port: number;
   env_overrides: string;
@@ -47,6 +48,7 @@ function getAppDeployment(applicationId: string): AppDeploymentRow {
           a.repository_url,
           a.default_branch,
           d.compose_path,
+          d.compose_project_name,
           d.public_service_name,
           d.public_port,
           d.env_overrides
@@ -58,7 +60,7 @@ function getAppDeployment(applicationId: string): AppDeploymentRow {
     .get(applicationId) as AppDeploymentRow | undefined;
 
   if (!row) {
-    throw new Error("対象アプリの配備情報が見つかりません。");
+    throw new Error("対象アプリのデプロイ情報が見つかりません。");
   }
 
   return row;
@@ -416,7 +418,7 @@ function recordDeployProgress(applicationId: string, title: string, message: str
 
 export async function executeDeployJob(applicationId: string, jobId: string): Promise<void> {
   const app = getAppDeployment(applicationId);
-  const composeProjectName = buildComposeProjectName(app.application_id, app.name);
+  const composeProjectName = resolveComposeProjectName(app.application_id, app.name, app.compose_project_name);
   startJob(jobId, "deploy ジョブを開始しました。");
 
   try {
@@ -427,7 +429,7 @@ export async function executeDeployJob(applicationId: string, jobId: string): Pr
     setCommitInfo(applicationId, headCommit);
 
     setAppStatus(applicationId, "Deploying");
-    setJobProgress(jobId, `リポジトリ取得完了。commit ${headCommit.slice(0, 12)} を配備準備中です。`);
+    setJobProgress(jobId, `リポジトリ取得完了。commit ${headCommit.slice(0, 12)} をデプロイ準備中です。`);
     recordDeployProgress(applicationId, "リポジトリ取得が完了しました", `commit ${headCommit} を取得しました。`);
     const composeFilePath = path.resolve(repoPath, app.compose_path);
     const envFilePath = writeComposeEnvFile(app);
@@ -459,8 +461,8 @@ export async function executeDeployJob(applicationId: string, jobId: string): Pr
       scope: "deployment",
       applicationId,
       level: "info",
-      title: "配備が完了しました",
-      message: `アプリ ${app.name} を配備しました。mode=${env.executionMode}`
+      title: "デプロイが完了しました",
+      message: `アプリ ${app.name} をデプロイしました。mode=${env.executionMode}`
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "不明なエラー";
@@ -470,7 +472,7 @@ export async function executeDeployJob(applicationId: string, jobId: string): Pr
       scope: "deployment",
       applicationId,
       level: "error",
-      title: "配備に失敗しました",
+      title: "デプロイに失敗しました",
       message
     });
   }
@@ -478,7 +480,7 @@ export async function executeDeployJob(applicationId: string, jobId: string): Pr
 
 export async function executeUpdateJob(applicationId: string, jobId: string): Promise<void> {
   const app = getAppDeployment(applicationId);
-  const composeProjectName = buildComposeProjectName(app.application_id, app.name);
+  const composeProjectName = resolveComposeProjectName(app.application_id, app.name, app.compose_project_name);
   startJob(jobId, "update ジョブを開始しました。");
 
   try {
@@ -560,7 +562,7 @@ export async function executeUpdateJob(applicationId: string, jobId: string): Pr
 
 export async function executeRollbackJob(applicationId: string, jobId: string): Promise<void> {
   const app = getAppDeployment(applicationId);
-  const composeProjectName = buildComposeProjectName(app.application_id, app.name);
+  const composeProjectName = resolveComposeProjectName(app.application_id, app.name, app.compose_project_name);
   startJob(jobId, "rollback ジョブを開始しました。");
 
   try {
@@ -644,7 +646,7 @@ export async function executeRollbackJob(applicationId: string, jobId: string): 
 
 export async function executeRebuildJob(applicationId: string, jobId: string, keepData: boolean): Promise<void> {
   const app = getAppDeployment(applicationId);
-  const composeProjectName = buildComposeProjectName(app.application_id, app.name);
+  const composeProjectName = resolveComposeProjectName(app.application_id, app.name, app.compose_project_name);
   startJob(jobId, "rebuild ジョブを開始しました。");
 
   try {
@@ -705,7 +707,7 @@ export async function executeRebuildJob(applicationId: string, jobId: string, ke
 
 export async function executeRestartJob(applicationId: string, jobId: string): Promise<void> {
   const app = getAppDeployment(applicationId);
-  const composeProjectName = buildComposeProjectName(app.application_id, app.name);
+  const composeProjectName = resolveComposeProjectName(app.application_id, app.name, app.compose_project_name);
   startJob(jobId, "restart ジョブを開始しました。");
 
   try {
@@ -747,7 +749,7 @@ export async function executeRestartJob(applicationId: string, jobId: string): P
 
 export async function executeStopJob(applicationId: string, jobId: string): Promise<void> {
   const app = getAppDeployment(applicationId);
-  const composeProjectName = buildComposeProjectName(app.application_id, app.name);
+  const composeProjectName = resolveComposeProjectName(app.application_id, app.name, app.compose_project_name);
   startJob(jobId, "stop ジョブを開始しました。");
 
   try {
@@ -790,7 +792,7 @@ export async function executeStopJob(applicationId: string, jobId: string): Prom
 
 export async function executeResumeJob(applicationId: string, jobId: string): Promise<void> {
   const app = getAppDeployment(applicationId);
-  const composeProjectName = buildComposeProjectName(app.application_id, app.name);
+  const composeProjectName = resolveComposeProjectName(app.application_id, app.name, app.compose_project_name);
   startJob(jobId, "resume ジョブを開始しました。");
 
   try {
@@ -847,7 +849,7 @@ type DeleteMode = "config_only" | "source_and_config" | "full";
 
 export async function executeDeleteJob(applicationId: string, jobId: string, mode: DeleteMode): Promise<void> {
   const app = getAppDeployment(applicationId);
-  const composeProjectName = buildComposeProjectName(app.application_id, app.name);
+  const composeProjectName = resolveComposeProjectName(app.application_id, app.name, app.compose_project_name);
   startJob(jobId, "delete ジョブを開始しました。");
 
   try {

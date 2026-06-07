@@ -3,12 +3,13 @@ import path from "node:path";
 import { db, nowIso } from "../lib/db.js";
 import { env } from "../lib/env.js";
 import { runCommand } from "./command-runner.js";
-import { buildComposeProjectName } from "./compose-project.js";
+import { resolveComposeProjectName } from "./compose-project.js";
 
 type AppDeploymentRow = {
   application_id: string;
   name: string;
   compose_path: string;
+  compose_project_name: string | null;
   public_service_name: string;
 };
 
@@ -37,6 +38,7 @@ function getAppDeployment(applicationId: string): AppDeploymentRow {
           a.application_id,
           a.name,
           d.compose_path,
+          d.compose_project_name,
           d.public_service_name
         FROM applications a
         INNER JOIN deployments d ON d.application_id = a.application_id
@@ -46,7 +48,7 @@ function getAppDeployment(applicationId: string): AppDeploymentRow {
     .get(applicationId) as AppDeploymentRow | undefined;
 
   if (!row) {
-    throw new Error("対象アプリの配備情報が見つかりません。");
+    throw new Error("対象アプリのデプロイ情報が見つかりません。");
   }
 
   return row;
@@ -73,7 +75,7 @@ function parseLogLines(stdout: string): string[] {
 export async function listApplicationServices(applicationId: string): Promise<string[]> {
   const app = getAppDeployment(applicationId);
   const repoPath = path.join(env.appsRoot, app.name);
-  const composeProjectName = buildComposeProjectName(app.application_id, app.name);
+  const composeProjectName = resolveComposeProjectName(app.application_id, app.name, app.compose_project_name);
 
   const servicesFromDb = db
     .prepare(
@@ -121,7 +123,7 @@ export async function readApplicationLogs(
 ): Promise<ApplicationLogSnapshot> {
   const app = getAppDeployment(applicationId);
   const repoPath = path.join(env.appsRoot, app.name);
-  const composeProjectName = buildComposeProjectName(app.application_id, app.name);
+  const composeProjectName = resolveComposeProjectName(app.application_id, app.name, app.compose_project_name);
 
   if (env.executionMode === "dry-run") {
     const events = db

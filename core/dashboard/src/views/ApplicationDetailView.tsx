@@ -1,7 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { ComposeInspectDialog } from "../components/ComposeInspectDialog";
-import type { ApplicationDetail, ApplicationListItem, ComposeServiceCandidate, DeleteMode } from "../types";
-import { jobStatusBadgeClass, logLineClass, shortCommit, statusBadgeClass, toLocale } from "../ui";
+import type { ApplicationDetail, ApplicationJob, ApplicationListItem, ComposeServiceCandidate, DeleteMode } from "../types";
+import {
+  applicationStatusMeta,
+  buildOperationLockReason,
+  formatElapsed,
+  formatRelative,
+  healthBadgeClass,
+  healthMeta,
+  jobStatusBadgeClass,
+  jobStatusLabel,
+  jobTypeLabel,
+  logLineClass,
+  shortCommit,
+  statusBadgeClass,
+  toLocale
+} from "../ui";
 
 export type DetailLogState = {
   opened: boolean;
@@ -36,6 +50,7 @@ type DeploymentComposeState = {
 type ApplicationDetailViewProps = {
   application: ApplicationListItem | null;
   detail: ApplicationDetail | null;
+  jobs: ApplicationJob[];
   detailLoading: boolean;
   loading: boolean;
   logs: DetailLogState;
@@ -58,6 +73,8 @@ type ApplicationDetailViewProps = {
   onCheckUpdate: (applicationId: string, applicationName: string) => void;
   onApplyUpdate: (applicationId: string, applicationName: string) => void;
   onRollback: (applicationId: string, applicationName: string) => void;
+  onRetryJob: (jobId: string, typeLabel: string) => void;
+  onCancelJob: (jobId: string) => void;
   onOpenLogs: (application: ApplicationListItem) => void;
   onRefreshLogs: (service?: string, tail?: number) => void;
   onSetSelectedLogService: (service: string) => void;
@@ -72,6 +89,7 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
   const {
     application,
     detail,
+    jobs,
     detailLoading,
     loading,
     logs,
@@ -94,6 +112,8 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
     onCheckUpdate,
     onApplyUpdate,
     onRollback,
+    onRetryJob,
+    onCancelJob,
     onOpenLogs,
     onRefreshLogs,
     onSetSelectedLogService,
@@ -105,6 +125,8 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
   } = props;
   const logViewerRef = useRef<HTMLDivElement | null>(null);
   const [deploymentExpanded, setDeploymentExpanded] = useState(true);
+  const [alertsExpanded, setAlertsExpanded] = useState(true);
+  const [jobsExpanded, setJobsExpanded] = useState(true);
   const [eventsExpanded, setEventsExpanded] = useState(true);
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [inspectDialogOpen, setInspectDialogOpen] = useState(false);
@@ -118,6 +140,8 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
 
   useEffect(() => {
     setDeploymentExpanded(true);
+    setAlertsExpanded(true);
+    setJobsExpanded(true);
     setEventsExpanded(true);
     setLogsExpanded(false);
     setInspectDialogOpen(false);
@@ -139,6 +163,7 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
 
   const currentApplication = application;
   const recentEvents = (detail?.events ?? []).slice(0, 20);
+  const relatedJobs = jobs.length > 0 ? jobs : detail?.jobs ?? [];
   const deployment = detail?.deployment;
   const composeCandidates = deploymentComposeState.composeCandidates;
   const otherYamlFiles = deploymentComposeState.yamlFiles.filter((yamlPath) => !composeCandidates.includes(yamlPath));
@@ -147,6 +172,11 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
   const envOverrideKeys = [...new Set([...environmentRequirements.map((requirement) => requirement.name), ...Object.keys(deploymentForm.envOverrides)])]
     .sort((a, b) => a.localeCompare(b));
   const deploymentEnabled = detail?.deployment?.enabled ?? currentApplication.status !== "Stopped";
+  const status = applicationStatusMeta(currentApplication.status);
+  const health = healthMeta(detail?.health ?? currentApplication.health);
+  const latestActiveJob = relatedJobs.find((job) => job.status === "running" || job.status === "queued") ?? null;
+  const operationLockReason = buildOperationLockReason(currentApplication);
+  const latestErrorSummary = currentApplication.latest_error_title || currentApplication.latest_error_message;
 
   function toggleLogsPanel(): void {
     const nextExpanded = !logsExpanded;
@@ -157,65 +187,160 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
     }
   }
 
+  function copyAlert(): void {
+    if (!latestErrorSummary) {
+      return;
+    }
+
+    const payload = [
+      `アプリ: ${currentApplication.name}`,
+      `発生時刻: ${currentApplication.latest_error_at ? toLocale(currentApplication.latest_error_at) : "未記録"}`,
+      currentApplication.latest_error_title ? `件名: ${currentApplication.latest_error_title}` : "",
+      currentApplication.latest_error_message ?? ""
+    ]
+      .filter((line) => line.length > 0)
+      .join("\n");
+
+    void navigator.clipboard.writeText(payload);
+  }
+
   return (
     <div className="view-grid detail-view">
-      <section className="panel-card">
+      <section className="panel-card detail-hero-card">
         <div className="panel-head">
-          <h2>{currentApplication.name}</h2>
+          <div>
+            <p className="section-kicker">DETAIL</p>
+            <h2>{currentApplication.name}</h2>
+            <p className="panel-sub">{currentApplication.description || "アプリの運用状態と操作履歴をここで確認できます。"}</p>
+          </div>
           <button type="button" className="button secondary" onClick={onBackToApplications}>
             一覧へ戻る
           </button>
         </div>
 
-        <div className="detail-summary">
-          <p>
-            状態: <span className={statusBadgeClass(currentApplication.status)}>{currentApplication.status}</span>
-          </p>
-          <p>公開状態: {deploymentEnabled ? "有効" : "停止中"}</p>
-          <p>
-            公開先:{" "}
-            <a href={`http://${currentApplication.hostname}`} target="_blank" rel="noreferrer">
-              {currentApplication.hostname}
-            </a>
-          </p>
-          <p>default branch: {currentApplication.default_branch}</p>
-          <p>current: {shortCommit(currentApplication.current_commit)}</p>
-          <p>previous: {shortCommit(currentApplication.previous_commit)}</p>
+        <div className="detail-stat-grid">
+          <article className="detail-stat-card">
+            <p>アプリ状態</p>
+            <strong><span className={statusBadgeClass(currentApplication.status)}>{status.label}</span></strong>
+            <span>{status.description}</span>
+          </article>
+          <article className="detail-stat-card">
+            <p>ヘルス</p>
+            <strong><span className={healthBadgeClass(detail?.health ?? currentApplication.health)}>{health.label}</span></strong>
+            <span>{health.description}</span>
+          </article>
+          <article className="detail-stat-card">
+            <p>公開 URL</p>
+            <strong>
+              <a href={`http://${currentApplication.hostname}`} target="_blank" rel="noreferrer">
+                {currentApplication.hostname}
+              </a>
+            </strong>
+            <span>{deploymentEnabled ? "公開中" : "停止中"}</span>
+          </article>
+          <article className="detail-stat-card">
+            <p>現在のコミット</p>
+            <strong>{shortCommit(currentApplication.current_commit)}</strong>
+            <span>前回 {shortCommit(currentApplication.previous_commit)}</span>
+          </article>
         </div>
 
-        {currentApplication.latest_job_status || currentApplication.latest_job_message ? (
+        <div className="detail-summary-grid">
+          <div className="detail-summary-block">
+            <span>ブランチ</span>
+            <strong>{currentApplication.default_branch}</strong>
+          </div>
+          <div className="detail-summary-block">
+            <span>登録日</span>
+            <strong>{toLocale(currentApplication.created_at)}</strong>
+          </div>
+          <div className="detail-summary-block">
+            <span>最終更新</span>
+            <strong>{formatRelative(currentApplication.updated_at)}</strong>
+          </div>
+          <div className="detail-summary-block">
+            <span>内部 Compose 名</span>
+            <strong>{deployment?.compose_project_name ?? "legacy"}</strong>
+          </div>
+        </div>
+
+        {latestActiveJob ? (
           <div className="detail-progress-card">
             <div className="panel-head compact">
-              <h3>進行状況</h3>
-              <span className={jobStatusBadgeClass(currentApplication.latest_job_status)}>
-                {currentApplication.latest_job_type ?? "job"} / {currentApplication.latest_job_status ?? "unknown"}
+              <h3>進行中の処理</h3>
+              <span className={jobStatusBadgeClass(latestActiveJob.status)}>
+                {jobTypeLabel(latestActiveJob.type)} / {jobStatusLabel(latestActiveJob.status)}
               </span>
             </div>
-            {currentApplication.latest_job_message ? <p className="detail-progress-message">{currentApplication.latest_job_message}</p> : null}
+            {latestActiveJob.message ? <p className="detail-progress-message">{latestActiveJob.message}</p> : null}
             <div className="detail-progress-meta">
-              {currentApplication.latest_job_created_at ? <p>作成: {toLocale(currentApplication.latest_job_created_at)}</p> : null}
-              {currentApplication.latest_job_started_at ? <p>開始: {toLocale(currentApplication.latest_job_started_at)}</p> : null}
-              {currentApplication.latest_job_finished_at ? <p>終了: {toLocale(currentApplication.latest_job_finished_at)}</p> : null}
+              <p>作成: {toLocale(latestActiveJob.created_at)}</p>
+              <p>開始: {toLocale(latestActiveJob.started_at)}</p>
+              <p>経過: {formatElapsed(latestActiveJob.started_at ?? latestActiveJob.created_at)}</p>
             </div>
-            <p className="panel-sub">配備や更新が進むと、この表示は自動で更新されます。</p>
+            <p className="panel-sub">処理完了までは競合操作を無効化しています。</p>
           </div>
         ) : null}
 
-        {currentApplication.latest_error_title ? (
-          <div className="detail-error-card">
-            <strong>{currentApplication.latest_error_title}</strong>
-            {currentApplication.latest_error_at ? <p>{toLocale(currentApplication.latest_error_at)}</p> : null}
-            {currentApplication.latest_error_message ? <pre>{currentApplication.latest_error_message}</pre> : null}
+        <div className={`panel-card accordion-card inline-accordion ${alertsExpanded ? "open" : ""}`}>
+          <button
+            type="button"
+            className="accordion-toggle"
+            onClick={() => setAlertsExpanded((prev) => !prev)}
+            aria-expanded={alertsExpanded}
+          >
+            <div>
+              <h2>現在のアラート</h2>
+              <p className="panel-sub">
+                {latestErrorSummary
+                  ? "この画面のアラートは直近の処理結果に紐づきます。履歴は下のイベント・ジョブから追跡できます。"
+                  : "直近の失敗や警告はありません。"}
+              </p>
+            </div>
+            <span className="accordion-meta">{alertsExpanded ? "折りたたむ" : "開く"}</span>
+          </button>
+
+          <div className={`accordion-body-wrap ${alertsExpanded ? "open" : ""}`}>
+            <div className="accordion-body-inner">
+              <div className="accordion-body">
+                {latestErrorSummary ? (
+                  <div className="detail-error-card">
+                    <div className="panel-head compact">
+                      <strong>{currentApplication.latest_error_title ?? "エラー詳細"}</strong>
+                      <button type="button" className="button tiny ghost" onClick={copyAlert}>
+                        コピー
+                      </button>
+                    </div>
+                    <p>{currentApplication.latest_error_at ? toLocale(currentApplication.latest_error_at) : "時刻不明"}</p>
+                    {currentApplication.latest_error_message ? <pre>{currentApplication.latest_error_message}</pre> : null}
+                  </div>
+                ) : (
+                  <p className="empty-message">このアプリの直近アラートはありません。</p>
+                )}
+              </div>
+            </div>
           </div>
-        ) : null}
+        </div>
 
         <div className="detail-actions">
           {deploymentEnabled ? (
-            <button type="button" className="button tiny secondary" onClick={() => onStop(currentApplication.application_id, currentApplication.name)}>
+            <button
+              type="button"
+              className="button tiny secondary"
+              onClick={() => onStop(currentApplication.application_id, currentApplication.name)}
+              disabled={Boolean(operationLockReason)}
+              title={operationLockReason ?? ""}
+            >
               停止
             </button>
           ) : (
-            <button type="button" className="button tiny primary" onClick={() => onResume(currentApplication.application_id, currentApplication.name)}>
+            <button
+              type="button"
+              className="button tiny primary"
+              onClick={() => onResume(currentApplication.application_id, currentApplication.name)}
+              disabled={Boolean(operationLockReason)}
+              title={operationLockReason ?? ""}
+            >
               再開
             </button>
           )}
@@ -223,30 +348,50 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
             type="button"
             className="button tiny"
             onClick={() => onRestart(currentApplication.application_id, currentApplication.name)}
-            disabled={!deploymentEnabled}
-            title={!deploymentEnabled ? "停止中は再開してから再起動してください" : ""}
+            disabled={!deploymentEnabled || Boolean(operationLockReason)}
+            title={operationLockReason ?? (!deploymentEnabled ? "停止中は再開してから再起動してください" : "")}
           >
             再起動
           </button>
-          <button type="button" className="button tiny secondary" onClick={() => onRebuild(currentApplication.application_id, currentApplication.name)}>
+          <button
+            type="button"
+            className="button tiny secondary"
+            onClick={() => onRebuild(currentApplication.application_id, currentApplication.name)}
+            disabled={Boolean(operationLockReason)}
+            title={operationLockReason ?? ""}
+          >
             再ビルド
           </button>
-          <button type="button" className="button tiny warn" onClick={() => onCheckUpdate(currentApplication.application_id, currentApplication.name)}>
+          <button
+            type="button"
+            className="button tiny warn"
+            onClick={() => onCheckUpdate(currentApplication.application_id, currentApplication.name)}
+            disabled={Boolean(operationLockReason)}
+            title={operationLockReason ?? ""}
+          >
             更新確認
           </button>
-          <button type="button" className="button tiny warn" onClick={() => onApplyUpdate(currentApplication.application_id, currentApplication.name)}>
+          <button
+            type="button"
+            className="button tiny warn"
+            onClick={() => onApplyUpdate(currentApplication.application_id, currentApplication.name)}
+            disabled={Boolean(operationLockReason)}
+            title={operationLockReason ?? ""}
+          >
             更新適用
           </button>
           <button
             type="button"
             className="button tiny"
             onClick={() => onRollback(currentApplication.application_id, currentApplication.name)}
-            disabled={!currentApplication.previous_commit}
-            title={!currentApplication.previous_commit ? "ロールバック可能な1つ前コミットがありません" : ""}
+            disabled={!currentApplication.previous_commit || Boolean(operationLockReason)}
+            title={operationLockReason ?? (!currentApplication.previous_commit ? "ロールバック可能な1つ前コミットがありません" : "")}
           >
             ロールバック
           </button>
         </div>
+
+        {operationLockReason ? <p className="hint warning">{operationLockReason}</p> : null}
       </section>
 
       <section className={`panel-card accordion-card ${deploymentExpanded ? "open" : ""}`}>
@@ -259,7 +404,7 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
           <div>
             <h2>デプロイ設定</h2>
             <p className="panel-sub">
-              保存すると公開先と次回以降の配備設定に反映されます。
+              保存すると公開先と次回以降のデプロイ設定に反映されます。
               {detailLoading ? " 読み込み中..." : ""}
             </p>
           </div>
@@ -444,9 +589,69 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
           </>
         ) : (
           <p className="empty-message">
-            {detailLoading ? "配備設定を読み込んでいます..." : "このアプリの配備設定はまだ取得できていません。"}
+            {detailLoading ? "デプロイ設定を読み込んでいます..." : "このアプリのデプロイ設定はまだ取得できていません。"}
           </p>
         )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className={`panel-card accordion-card ${jobsExpanded ? "open" : ""}`}>
+        <button
+          type="button"
+          className="accordion-toggle"
+          onClick={() => setJobsExpanded((prev) => !prev)}
+          aria-expanded={jobsExpanded}
+        >
+          <div>
+            <h2>関連ジョブ</h2>
+            <p className="panel-sub">待機中・実行中・失敗・完了を時系列で確認できます。</p>
+          </div>
+          <span className="accordion-meta">{relatedJobs.length} 件 / {jobsExpanded ? "折りたたむ" : "開く"}</span>
+        </button>
+
+        <div className={`accordion-body-wrap ${jobsExpanded ? "open" : ""}`}>
+          <div className="accordion-body-inner">
+            <div className="accordion-body">
+              {relatedJobs.length === 0 ? (
+                <p className="empty-message">このアプリに紐づくジョブはまだありません。</p>
+              ) : (
+                <div className="job-history-list">
+                  {relatedJobs.map((job) => (
+                    <article key={job.job_id} className="job-card">
+                      <div className="job-card-head">
+                        <div>
+                          <strong>{jobTypeLabel(job.type)}</strong>
+                          <p>{job.message ?? "詳細メッセージはありません。"}</p>
+                        </div>
+                        <span className={jobStatusBadgeClass(job.status)}>{jobStatusLabel(job.status)}</span>
+                      </div>
+                      <div className="job-card-meta">
+                        <span>作成 {toLocale(job.created_at)}</span>
+                        <span>開始 {toLocale(job.started_at)}</span>
+                        <span>経過 {formatElapsed(job.started_at ?? job.created_at, job.finished_at)}</span>
+                      </div>
+                      <div className="job-card-actions">
+                        {job.cancellable ? (
+                          <button type="button" className="button tiny warn" onClick={() => onCancelJob(job.job_id)}>
+                            待機を取り消す
+                          </button>
+                        ) : null}
+                        {job.retryable ? (
+                          <button
+                            type="button"
+                            className="button tiny primary"
+                            onClick={() => onRetryJob(job.job_id, jobTypeLabel(job.type))}
+                          >
+                            再実行
+                          </button>
+                        ) : null}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -575,7 +780,7 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
 
       <section className="panel-card danger-card">
         <h2>削除</h2>
-        <p className="panel-sub">破壊的操作です。モード選択と確認入力が必要です。</p>
+        <p className="panel-sub">破壊的操作です。対象アプリ名の確認と削除範囲の明示を必須にしています。</p>
         <div className="delete-grid">
           <label>
             削除モード
@@ -594,8 +799,9 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
             />
           </label>
         </div>
+        {operationLockReason ? <p className="hint warning">{operationLockReason}</p> : null}
         <div className="delete-actions">
-          <button type="button" className="button danger" onClick={onDeleteSubmit} disabled={loading}>
+          <button type="button" className="button danger" onClick={onDeleteSubmit} disabled={loading || Boolean(operationLockReason)}>
             削除ジョブを開始
           </button>
         </div>
