@@ -76,6 +76,75 @@ function profileYaml(name: string, config: TemplateConfig): string {
   return `profile: prod\noverrides:\n  env:\n    LABCORE_DEVICE_MODE: real\n  composeFiles:\n    - docker-compose.yml\n    - docker-compose.prod.yml\n  deviceRequirements:${config.deviceRequired ? "\n    - /dev/bus/usb" : " []"}\n  guard:\n    allowMock: false\n    requireDevicePaths:${config.deviceRequired ? "\n      - /dev/bus/usb" : " []"}\n`;
 }
 
+function sdkUsageGuideMd(appName: string, template: TemplateKind, config: TemplateConfig): string {
+  const deviceNotes = config.deviceRequired
+    ? [
+        "- `device` テンプレートでは `LABCORE_DEVICE_MODE` と `/dev/bus/usb` を前提にしています。",
+        "- 実機検証前に `labcore/profiles/dev-real-device.yaml` と `labcore/profiles/prod.yaml` の device 要件を確認してください。"
+      ]
+    : [
+        "- `standard` / `headless` テンプレートでは mock で始めやすい初期値を入れています。",
+        "- 実運用前に `labcore/profiles/prod.yaml` の env と compose 差分を確認してください。"
+      ];
+
+  return `# SDK使い方
+
+このファイルは \`labcore init\` 実行時に自動生成されました。  
+対象アプリ: \`${appName}\`  
+テンプレート: \`${template}\`
+
+## 1. まず確認するファイル
+- \`labcore.app.yaml\`
+- \`labcore/profiles/dev-sim.yaml\`
+- \`labcore/profiles/dev-real-device.yaml\`
+- \`labcore/profiles/prod.yaml\`
+- \`labcore/seeds/apply.sh\` / \`verify.sh\` / \`reset.sh\`
+
+## 2. 初回セットアップの流れ
+1. \`labcore.app.yaml\` の \`repository.url\`, \`exposure.hostname\`, 必須 env を実アプリ向けに直す
+2. \`docker-compose.yml\` と \`docker-compose.dev.yml\` / \`docker-compose.prod.yml\` のサービス名・ポートを実装に合わせる
+3. \`labcore/profiles/*.yaml\` の compose 差分と env 上書きを調整する
+4. 必要なら \`labcore/seeds/*.sh\` に初期化処理を書く
+
+## 3. よく使うコマンド
+CLI を直接使える場合:
+
+\`\`\`bash
+labcore lint --profile dev-sim
+labcore preflight --profile dev-sim
+labcore inspect --profile dev-sim
+labcore guard prod --profile prod
+labcore export --profile prod --out build/labcore-payload.json
+\`\`\`
+
+この monorepo から実行する場合:
+
+\`\`\`bash
+yarn sdk:labcore lint --profile dev-sim
+yarn sdk:labcore preflight --profile dev-sim
+yarn sdk:labcore inspect --profile dev-sim
+yarn sdk:labcore guard prod --profile prod
+yarn sdk:labcore export --profile prod --out build/labcore-payload.json
+\`\`\`
+
+## 4. この雛形の初期値
+- 公開サービス: \`${config.service}\`
+- 公開ポート: \`${String(config.port)}\`
+- deployment mode: \`${config.mode}\`
+${deviceNotes.join("\n")}
+
+## 5. 登録前チェック
+1. \`lint\` で manifest / profile / compose の整合性を確認する
+2. \`preflight\` で起動前の警告を確認する
+3. \`guard prod\` で本番設定に mock が残っていないか確認する
+4. \`export\` で登録用 payload を出力する
+
+## 6. 補足
+- このファイルは雛形の初期説明書です。実アプリに合わせて更新してください。
+- より詳細な schema / CLI / API 情報が必要なら、利用中の Lab-Core SDK 本体ドキュメントを参照してください。
+`;
+}
+
 export function runInitCommand(args: string[]): number {
   const templateArg = (readOption(args, "template") ?? "standard") as TemplateKind;
   if (!["standard", "headless", "device"].includes(templateArg)) {
@@ -106,6 +175,7 @@ export function runInitCommand(args: string[]): number {
     writeFile(path.resolve(cwd, "labcore", "profiles", "dev-sim.yaml"), profileYaml("dev-sim", config), force, changes);
     writeFile(path.resolve(cwd, "labcore", "profiles", "dev-real-device.yaml"), profileYaml("dev-real-device", config), force, changes);
     writeFile(path.resolve(cwd, "labcore", "profiles", "prod.yaml"), profileYaml("prod", config), force, changes);
+    writeFile(path.resolve(cwd, "labcore", "SDK使い方.md"), sdkUsageGuideMd(appName, templateArg, config), force, changes);
     writeFile(path.resolve(cwd, "labcore", "seeds", "apply.sh"), "#!/usr/bin/env bash\nset -euo pipefail\necho \"seed apply (${LABCORE_PROFILE:-unknown})\"\n", force, changes);
     writeFile(path.resolve(cwd, "labcore", "seeds", "verify.sh"), "#!/usr/bin/env bash\nset -euo pipefail\necho \"seed verify (${LABCORE_PROFILE:-unknown})\"\n", force, changes);
     writeFile(path.resolve(cwd, "labcore", "seeds", "reset.sh"), "#!/usr/bin/env bash\nset -euo pipefail\necho \"seed reset (${LABCORE_PROFILE:-unknown})\"\n", force, changes);

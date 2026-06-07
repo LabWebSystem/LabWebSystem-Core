@@ -46,6 +46,7 @@ import { lintSdk, inspectSdk, exportSdkPayload, guardProdSdk } from "@lab-core/s
 
 ## 5. 生成される主なファイル
 - `labcore.app.yaml`
+- `labcore/SDK使い方.md`
 - `labcore/profiles/dev-sim.yaml`
 - `labcore/profiles/dev-real-device.yaml`
 - `labcore/profiles/prod.yaml`

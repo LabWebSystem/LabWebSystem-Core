@@ -105,7 +105,7 @@ overrides:
 
 ## 4. CLI コマンド
 - `init`
-  - 雛形生成
+  - 雛形生成（`labcore/SDK使い方.md` を含む）
 - `inspect`
   - compose の解析結果を表示
 - `lint`
