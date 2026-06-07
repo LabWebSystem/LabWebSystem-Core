@@ -1077,6 +1077,7 @@ export function App() {
           }
           onRetryJob={(jobId, typeLabel) => void onRetryJob(jobId, typeLabel)}
           onCancelJob={(jobId) => void onCancelJob(jobId)}
+          onDeleteJob={(jobId) => void onDeleteJob(jobId)}
           onOpenLogs={(application) => void openLogs(application)}
           onRefreshLogs={(service, tail) => void refreshLogs(service, tail)}
           onSetSelectedLogService={(service) => setLogs((prev) => ({ ...prev, selectedService: service }))}

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { FiAlertCircle, FiCheckCircle, FiClock, FiLoader, FiRefreshCw, FiTrash2, FiX } from "react-icons/fi";
 import type { ApplicationJob } from "../types";
-import { formatElapsed, formatRelative, jobStatusLabel, jobTypeLabel } from "../ui";
+import { canCancelJob, canDeleteJob, canRetryJob, formatElapsed, formatRelative, jobStatusLabel, jobTypeLabel } from "../ui";
 
 type JobsPanelProps = {
   open: boolean;
@@ -134,7 +134,7 @@ export function JobsPanel(props: JobsPanelProps) {
                       対象アプリ
                     </button>
                   ) : null}
-                  {job.cancellable ? (
+                  {canCancelJob(job) ? (
                     <button
                       type="button"
                       className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-800 transition hover:bg-amber-100"
@@ -143,7 +143,7 @@ export function JobsPanel(props: JobsPanelProps) {
                       取り消す
                     </button>
                   ) : null}
-                  {job.retryable ? (
+                  {canRetryJob(job) ? (
                     <button
                       type="button"
                       className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-700"
@@ -153,7 +153,7 @@ export function JobsPanel(props: JobsPanelProps) {
                       再実行
                     </button>
                   ) : null}
-                  {job.dismissible ? (
+                  {canDeleteJob(job) ? (
                     <button
                       type="button"
                       className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"

@@ -4,6 +4,9 @@ import type { ApplicationDetail, ApplicationJob, ApplicationListItem, ComposeSer
 import {
   applicationStatusMeta,
   buildOperationLockReason,
+  canCancelJob,
+  canDeleteJob,
+  canRetryJob,
   formatElapsed,
   formatRelative,
   healthBadgeClass,
@@ -75,6 +78,7 @@ type ApplicationDetailViewProps = {
   onRollback: (applicationId: string, applicationName: string) => void;
   onRetryJob: (jobId: string, typeLabel: string) => void;
   onCancelJob: (jobId: string) => void;
+  onDeleteJob: (jobId: string) => void;
   onOpenLogs: (application: ApplicationListItem) => void;
   onRefreshLogs: (service?: string, tail?: number) => void;
   onSetSelectedLogService: (service: string) => void;
@@ -114,6 +118,7 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
     onRollback,
     onRetryJob,
     onCancelJob,
+    onDeleteJob,
     onOpenLogs,
     onRefreshLogs,
     onSetSelectedLogService,
@@ -633,18 +638,23 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
                         <span>経過 {formatElapsed(job.started_at ?? job.created_at, job.finished_at)}</span>
                       </div>
                       <div className="job-card-actions">
-                        {job.cancellable ? (
+                        {canCancelJob(job) ? (
                           <button type="button" className="button tiny warn" onClick={() => onCancelJob(job.job_id)}>
                             待機を取り消す
                           </button>
                         ) : null}
-                        {job.retryable ? (
+                        {canRetryJob(job) ? (
                           <button
                             type="button"
                             className="button tiny primary"
                             onClick={() => onRetryJob(job.job_id, jobTypeLabel(job.type))}
                           >
                             再実行
+                          </button>
+                        ) : null}
+                        {canDeleteJob(job) ? (
+                          <button type="button" className="button tiny secondary" onClick={() => onDeleteJob(job.job_id)}>
+                            削除
                           </button>
                         ) : null}
                       </div>

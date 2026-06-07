@@ -149,6 +149,18 @@ export function jobStatusBadgeClass(status: string | null | undefined): string {
   }
 }
 
+export function canCancelJob(job: ApplicationJob): boolean {
+  return job.cancellable ?? job.status === "queued";
+}
+
+export function canRetryJob(job: ApplicationJob): boolean {
+  return job.retryable ?? (job.status === "failed" && job.related_application_id !== null);
+}
+
+export function canDeleteJob(job: ApplicationJob): boolean {
+  return job.dismissible ?? ["succeeded", "failed", "cancelled"].includes(job.status);
+}
+
 export function applicationStatusMeta(status: string): { label: string; tone: Tone; description: string } {
   switch (status) {
     case "Build Pending":
