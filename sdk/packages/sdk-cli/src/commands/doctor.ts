@@ -1,7 +1,7 @@
+import { lintSdk } from "@lab-core/sdk";
 import { spawnSync } from "node:child_process";
 import { readOption } from "../shared/args.js";
 import { EXIT_FAILURE, EXIT_SUCCESS, EXIT_VALIDATION } from "../shared/error-codes.js";
-import { executeLint } from "./lint.js";
 import { printList, printSection } from "../presenters/human.js";
 
 function checkBinary(name: string): { ok: boolean; detail: string } {
@@ -27,7 +27,7 @@ export function runDoctorCommand(args: string[]): number {
   try {
     const docker = checkBinary("docker");
     const git = checkBinary("git");
-    const lint = executeLint(process.cwd(), profile);
+    const lint = lintSdk({ cwd: process.cwd(), profile });
 
     printSection("doctor");
     process.stdout.write(`docker: ${docker.ok ? "ok" : "ng"} (${docker.detail})\n`);

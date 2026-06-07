@@ -1,8 +1,8 @@
 # SDK概要
 
 対象読者:
-- Lab-Core 適合アプリを新規作成する開発者
-- 既存リポジトリを Lab-Core に統合したい開発者
+- LabWebSystem 適合アプリを新規作成する開発者
+- 既存リポジトリを LabWebSystem に統合したい開発者
 
 文書ステータス:
 - current
@@ -11,66 +11,72 @@
 - 2026-06-07
 
 ## 1. SDK の位置づけ
-Lab-Core は、所定のルールに従う GitHub リポジトリを Web アプリとして登録するプラグイン方式の基盤です。  
-各アプリは Lab-Core 本体に直接組み込むのではなく、独立した GitHub リポジトリとして管理し、そのリポジトリを登録して運用します。
-
-SDK は、その「Lab-Core に統合できるアプリリポジトリ」を作るための TypeScript ライブラリ兼 CLI です。
+SDK は、LabWebSystem に安全に登録できるアプリリポジトリを作るための TypeScript ライブラリ兼 CLI です。  
+単なる schema 検証だけでなく、compose 分離、same-origin、`APPDATA_ROOT`、`hostname` といった運用上の落とし穴も確認できる入口として使います。
 
 ## 2. SDK でできること
-- Lab-Core 適合リポジトリの雛形を生成する
-- manifest / profile / compose の整合性を検査する
-- 開発用と本番用の設定を profile で分離する
-- 登録用 payload を生成する
-- seed / CI の導線を標準化する
+- LabWebSystem 適合リポジトリのひな形生成
+- manifest / profile / compose の整合性検査
+- 開発用と本番用の compose / env 分離
+- 登録用 payload の生成
+- seed / CI / repo ローカル scripts の導線生成
 
 ## 3. 導入方法
-新しい Lab-Core 適合アプリを作るときは、まず CLI を一時実行して雛形を生成します。
+最初のひな形作成:
 
 ```bash
-yarn dlx -p @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main labcore init --template standard
+yarn dlx -p @lab-core/sdk-cli@https://github.com/LabWebSystem/LabWebSystem-Core.git#workspace=@lab-core/sdk-cli&head=main labcore init --template standard
 ```
 
-継続的に lint / preflight / export / CI で使う場合は、新規作成したリポジトリ側に CLI を開発依存として追加します。
+継続利用する場合:
 
 ```bash
-yarn add -D @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main
+yarn add -D @lab-core/sdk-cli@https://github.com/LabWebSystem/LabWebSystem-Core.git#workspace=@lab-core/sdk-cli&head=main
 ```
 
-library API を使いたい場合だけ、必要に応じて `@lab-core/sdk` も追加します。
+library API を使う場合だけ `@lab-core/sdk` を追加します。
 
 ```bash
-yarn add @lab-core/sdk@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk&head=main
+yarn add @lab-core/sdk@https://github.com/LabWebSystem/LabWebSystem-Core.git#workspace=@lab-core/sdk&head=main
 ```
 
-library 使用例:
-```ts
-import { lintSdk, inspectSdk, exportSdkPayload, guardProdSdk } from "@lab-core/sdk";
-```
-
-## 4. 基本フロー
-1. `yarn dlx -p @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main labcore init --template standard`
-2. `yarn add -D @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main`
-3. 生成された `labcore.app.yaml` と profile を調整する
-4. `yarn exec labcore lint --profile dev-sim`
-5. `yarn exec labcore preflight --profile dev-sim`
-6. `yarn exec labcore guard prod --profile prod`
-7. `yarn exec labcore export --profile prod --out build/labcore-payload.json`
-8. Lab-Core ダッシュボードで GitHub リポジトリを登録する
-
-## 5. 生成される主なファイル
+## 4. `init` で生成される主なもの
 - `labcore.app.yaml`
-- `labcore/SDK使い方.md`
 - `labcore/profiles/dev-sim.yaml`
 - `labcore/profiles/dev-real-device.yaml`
 - `labcore/profiles/prod.yaml`
-- `labcore/seeds/apply.sh`
-- `labcore/seeds/verify.sh`
-- `labcore/seeds/reset.sh`
+- `labcore/SDK使い方.md`
+- `package.json` の `labcore:lint` / `labcore:preflight` / `labcore:guard` / `labcore:export`
 
-## 6. どういう場面で使うか
-- 新しい Lab-Core 適合アプリの雛形を最短で作りたいとき
-- 既存の Docker Compose アプリが Lab-Core に正しく統合可能かを確認したいとき
-- 本番配備前に mock 設定や必須 env 漏れを検出したいとき
+初期値の方針:
+- `hostname` は `*.lab.localhost`
+- 配備用 compose は `docker-compose.yml`
+- localhost 用 compose は `docker-compose.dev.yml`
+- `prod` profile は配備用 compose だけを使う
 
-## 7. 詳細仕様
-manifest / profile / CLI / library API の詳細は `docs/readmes/SDK仕様書.md` を参照してください。
+## 5. 基本フロー
+1. `labcore init` でひな形を作る
+2. `labcore.app.yaml` の `repository.url` と `hostname` を実アプリ向けに直す
+3. `docker-compose.yml` と `docker-compose.dev.yml` を実装に合わせる
+4. `yarn labcore:lint`
+5. `yarn labcore:preflight`
+6. `yarn labcore:guard`
+7. `yarn labcore:export`
+8. ダッシュボードで登録する
+
+## 6. `lint` / `doctor` が見ること
+- `exposure.service` と compose の一致
+- `exposure.port` と listen ポートの一致
+- 必須 env の不足
+- デバイス要件の不足
+- 配備用 compose に `ports:` が残っていないか
+- runtime 設定に `localhost` が残っていないか
+- `APPDATA_ROOT` が未使用ではないか
+- `prod` profile に `LABCORE_DEVICE_MODE=real` があるか
+- `hostname` が `*.lab.localhost` のままではないか
+
+## 7. 関連資料
+- `docs/readmes/適合アプリ作成ガイド.md`
+- `docs/readmes/LabWebSystem適合アプリ構成図.md`
+- `docs/readmes/登録前チェックリスト.md`
+- `docs/readmes/SDK仕様書.md`

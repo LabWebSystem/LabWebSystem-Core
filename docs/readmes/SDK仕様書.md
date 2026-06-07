@@ -26,9 +26,7 @@
 - `@lab-core/sdk-ci`
   - GitHub Actions テンプレート
 
-## 2. `labcore.app.yaml` の仕様
-必須の大枠は次のとおりです。
-
+## 2. `labcore.app.yaml` の要点
 ```yaml
 schemaVersion: 1
 app:
@@ -43,45 +41,34 @@ deployment:
   keepVolumesOnRebuild: true
 exposure:
   service: web
-  port: 3000
-  hostname: my-app.fukaya-sus.lab
+  port: 4173
+  hostname: my-app.lab.localhost
 devices:
   required: []
 env:
   required:
     - ADMIN_FIXED_PASSWORD
   defaults:
-    LOG_LEVEL: info
+    APPDATA_ROOT: ../../appdata/my-app
 profiles:
   default: dev-sim
 ```
 
-主な項目:
-- `schemaVersion`
-  - 現在は `1`
-- `app`
-  - アプリ名と説明
-- `repository`
-  - GitHub リポジトリ URL と既定ブランチ
-- `deployment`
-  - compose の入口と mode
-- `exposure`
-  - 公開対象サービス・ポート・ホスト名
-- `devices`
-  - 必須デバイスパス
-- `env`
-  - 必須環境変数と既定値
-- `profiles`
-  - 既定 profile 名
+重要な考え方:
+- `composePath` は配備用 compose を指す
+- `hostname` は登録時に使われる値そのもの
+- localhost 開発の既定値には `*.lab.localhost` を使う
+- 永続データがある場合は `APPDATA_ROOT` を defaults に置く
 
-## 3. profile の仕様
-profile ファイルでは、manifest に対する上書きを定義します。
-
+## 3. profile の推奨構成
+### 3.1 `dev-sim`
 ```yaml
 profile: dev-sim
 overrides:
   env:
+    APPDATA_ROOT: ./.appdata/my-app
     LABCORE_DEVICE_MODE: mock
+    LABCORE_ENABLE_MOCK: "true"
   composeFiles:
     - docker-compose.yml
     - docker-compose.dev.yml
@@ -91,48 +78,76 @@ overrides:
     requireDevicePaths: []
 ```
 
-主な項目:
-- `profile`
-  - profile 名
-- `overrides.env`
-  - 環境変数上書き
-- `overrides.composeFiles`
-  - 利用する compose ファイル一覧
-- `overrides.deviceRequirements`
-  - profile ごとのデバイス要件
-- `overrides.guard`
-  - 本番ガード条件
-
-## 4. CLI コマンド
-新規作成したアプリリポジトリでは、まず `@lab-core/sdk-cli` を追加してから `yarn exec labcore ...` で使います。
-
-```bash
-yarn add -D @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main
-yarn exec labcore lint --profile dev-sim
+### 3.2 `dev-real-device`
+```yaml
+profile: dev-real-device
+overrides:
+  env:
+    APPDATA_ROOT: ./.appdata/my-app
+    LABCORE_DEVICE_MODE: real
+  composeFiles:
+    - docker-compose.yml
+    - docker-compose.dev.yml
+  deviceRequirements: []
+  guard:
+    allowMock: false
+    requireDevicePaths: []
 ```
 
+### 3.3 `prod`
+```yaml
+profile: prod
+overrides:
+  env:
+    LABCORE_DEVICE_MODE: real
+  composeFiles:
+    - docker-compose.yml
+  deviceRequirements: []
+  guard:
+    allowMock: false
+    requireDevicePaths: []
+```
+
+## 4. CLI コマンド
+導入:
+
+```bash
+yarn add -D @lab-core/sdk-cli@https://github.com/LabWebSystem/LabWebSystem-Core.git#workspace=@lab-core/sdk-cli&head=main
+```
+
+主要コマンド:
 - `init`
-  - 雛形生成（`labcore/SDK使い方.md` を含む）
+  - ひな形生成と repo ローカル scripts 作成
 - `inspect`
   - compose の解析結果を表示
 - `lint`
-  - manifest / profile / compose の整合性を検証
+  - manifest / profile / compose の整合性と運用警告を表示
 - `preflight`
-  - 実行前確認
+  - compose の起動確認
 - `seed <apply|verify|reset>`
   - seed スクリプト実行
-- `export`
-  - 登録用 payload 出力
 - `guard prod`
   - 本番向け安全性チェック
+- `export`
+  - 登録用 payload 出力
 - `doctor`
-  - 設定診断
+  - 実行環境と lint をまとめて診断
 - `ci-install`
   - GitHub Actions テンプレート導入
 
-## 5. library API
-`@lab-core/sdk` は次の API を公開しています。
+## 5. `lint` / `doctor` の運用警告
+現在の SDK は、schema 的には通っても本番事故になりやすい構成を警告します。
 
+- 配備用 compose に `ports:` がある
+- resolved env や compose に `localhost` が含まれている
+- `VITE_API_BASE_URL` が same-origin ではない
+- `APPDATA_ROOT` が compose から参照されていない
+- `prod` profile に `LABCORE_DEVICE_MODE` がない
+- `prod` profile に `docker-compose.dev.yml` が混ざっている
+- `hostname` が `*.lab.localhost` のままになっている
+
+## 6. library API
+公開 API:
 - `loadSdkContext(options)`
 - `inspectSdk(options)`
 - `lintSdk(options)`
@@ -150,27 +165,20 @@ if (!lint.ok) {
   process.exit(1);
 }
 
+for (const warning of lint.warnings) {
+  console.warn(warning);
+}
+
 const payload = exportSdkPayload({ cwd: process.cwd(), profile: "prod" });
 console.log(payload);
 ```
 
-## 6. CI 連携
-`ci-install` を使うと `.github/workflows/labcore-sdk.yml` を追加できます。  
-この workflow は、対象リポジトリ側の `devDependencies` に `@lab-core/sdk-cli` が入っている前提で、主に次を実行します。
-
-- `yarn exec labcore lint --profile dev-sim`
-- `yarn exec labcore preflight --profile dev-sim`
-- `yarn exec labcore guard prod --profile prod`
-- `yarn exec labcore export --profile prod --out build/labcore-payload.json`
-
-## 7. よくある失敗
-- `exposure.service` と compose のサービス名が一致しない
-- `exposure.port` と実際の listen ポートが一致しない
-- `env.required` の値が profile で埋まっていない
-- `devices.required` と `deviceRequirements` が一致しない
-- 開発用 compose にしか公開サービスが定義されていない
+## 7. GitHub 参照導入の補足
+workspace 依存を含むパッケージを git 経由で利用しやすくするため、`sdk-profile` / `sdk` / `sdk-cli` の `prepack` は monorepo 全体 build を実行します。  
+これにより、依存 workspace の成果物不足で pack が失敗しにくくなります。
 
 ## 8. 関連資料
 - `docs/readmes/SDK概要.md`
 - `docs/readmes/適合アプリ作成ガイド.md`
-- `sdk/README.md`
+- `docs/readmes/LabWebSystem適合アプリ構成図.md`
+- `docs/readmes/登録前チェックリスト.md`

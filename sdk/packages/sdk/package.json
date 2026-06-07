@@ -17,7 +17,7 @@
     "build": "yarn exec tsc -p tsconfig.json",
     "test": "node --test dist/tests/*.test.js",
     "clean": "rm -rf dist",
-    "prepack": "yarn build"
+    "prepack": "yarn --cwd ../../ build"
   },
   "dependencies": {
     "@lab-core/sdk-contract": "workspace:*",

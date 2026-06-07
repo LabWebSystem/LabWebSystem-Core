@@ -22,6 +22,7 @@ import {
   type ResolvedProfile
 } from "@lab-core/sdk-profile";
 import { runSeedAction, type SeedAction, type SeedResult } from "@lab-core/sdk-seed";
+import { collectOperationalWarnings } from "./operational-warnings.js";
 
 export type SdkContext = {
   cwd: string;
@@ -37,6 +38,7 @@ export type SdkLintResult = {
   errors: string[];
   warnings: string[];
   inspection: ComposeInspectionResult | null;
+  composePath: string;
 };
 
 export function loadSdkContext(options: { cwd?: string; profile?: string } = {}): SdkContext {
@@ -101,7 +103,8 @@ export function lintSdk(options: { cwd?: string; profile?: string } = {}): SdkLi
       ok: false,
       errors,
       warnings,
-      inspection: null
+      inspection: null,
+      composePath
     };
   }
 
@@ -146,12 +149,19 @@ export function lintSdk(options: { cwd?: string; profile?: string } = {}): SdkLi
 
   warnings.push(...inspection.parseWarnings.map((entry) => `parse warning: ${entry}`));
   warnings.push(...inspection.analysisWarnings.map((entry) => `analysis warning: ${entry}`));
+  warnings.push(...collectOperationalWarnings({
+    composePath,
+    inspection,
+    manifest: context.manifest,
+    resolved: context.resolved
+  }));
 
   return {
     ok: errors.length === 0,
     errors,
     warnings,
-    inspection
+    inspection,
+    composePath
   };
 }
 
