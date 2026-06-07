@@ -1,13 +1,6 @@
 import { FiActivity, FiAlertTriangle, FiArrowRight, FiCheckCircle, FiClock, FiExternalLink, FiXCircle } from "react-icons/fi";
 import type { ApplicationJob, ApplicationListItem, SystemEvent, SystemStatus } from "../types";
-import {
-  buildAttentionSummary,
-  formatRelative,
-  healthMeta,
-  jobTypeLabel,
-  shortCommit,
-  toLocale
-} from "../ui";
+import { buildAttentionSummary, formatRelative, healthMeta, jobTypeLabel, shortCommit, toLocale } from "../ui";
 
 type HomeViewProps = {
   system: SystemStatus | null;
@@ -20,15 +13,15 @@ type HomeViewProps = {
 
 function metricTone(kind: "ok" | "warn" | "error" | "neutral"): string {
   if (kind === "ok") {
-    return "from-emerald-50 to-white text-emerald-900 ring-emerald-200";
+    return "bg-emerald-50 text-emerald-900 border-emerald-200";
   }
   if (kind === "warn") {
-    return "from-amber-50 to-white text-amber-900 ring-amber-200";
+    return "bg-amber-50 text-amber-900 border-amber-200";
   }
   if (kind === "error") {
-    return "from-rose-50 to-white text-rose-900 ring-rose-200";
+    return "bg-rose-50 text-rose-900 border-rose-200";
   }
-  return "from-slate-50 to-white text-slate-900 ring-slate-200";
+  return "bg-slate-50 text-slate-900 border-slate-200";
 }
 
 export function HomeView(props: HomeViewProps) {
@@ -48,90 +41,92 @@ export function HomeView(props: HomeViewProps) {
   const recentApps = [...applications].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 5);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pr-1">
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <article className={`rounded-3xl bg-gradient-to-br p-5 ring-1 ${metricTone("neutral")}`}>
+    <div className="flex flex-col gap-6">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <article className={`rounded-xl border p-5 ${metricTone("neutral")}`}>
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-600">登録アプリ</span>
-            <FiActivity className="h-5 w-5 text-slate-400" />
+            <span className="text-sm font-semibold">登録アプリ</span>
+            <FiActivity className="h-5 w-5 text-slate-500" />
           </div>
-          <p className="mt-5 text-3xl font-semibold tracking-tight">{applications.length}</p>
-          <p className="mt-2 text-sm text-slate-500">{system?.applicationSummary.running ?? 0} 件が稼働中</p>
+          <p className="mt-4 text-3xl font-bold">{applications.length}</p>
+          <p className="mt-1 text-xs text-slate-500">{system?.applicationSummary.running ?? 0} 件が稼働中</p>
         </article>
 
-        <article className={`rounded-3xl bg-gradient-to-br p-5 ring-1 ${metricTone("ok")}`}>
+        <article className={`rounded-xl border p-5 ${metricTone("ok")}`}>
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-emerald-700">正常</span>
-            <FiCheckCircle className="h-5 w-5 text-emerald-500" />
+            <span className="text-sm font-semibold text-emerald-800">正常</span>
+            <FiCheckCircle className="h-5 w-5 text-emerald-600" />
           </div>
-          <p className="mt-5 text-3xl font-semibold tracking-tight">{healthyCount}</p>
-          <p className="mt-2 text-sm text-emerald-700/70">応答とコンテナが安定</p>
+          <p className="mt-4 text-3xl font-bold">{healthyCount}</p>
+          <p className="mt-1 text-xs text-emerald-600/80">応答とコンテナが安定</p>
         </article>
 
-        <article className={`rounded-3xl bg-gradient-to-br p-5 ring-1 ${metricTone("warn")}`}>
+        <article className={`rounded-xl border p-5 ${metricTone("warn")}`}>
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-amber-700">要確認</span>
-            <FiAlertTriangle className="h-5 w-5 text-amber-500" />
+            <span className="text-sm font-semibold text-amber-800">要確認</span>
+            <FiAlertTriangle className="h-5 w-5 text-amber-600" />
           </div>
-          <p className="mt-5 text-3xl font-semibold tracking-tight">{warningCount}</p>
-          <p className="mt-2 text-sm text-amber-700/70">遅延・画面確認が必要</p>
+          <p className="mt-4 text-3xl font-bold">{warningCount}</p>
+          <p className="mt-1 text-xs text-amber-700/80">遅延・画面確認が必要</p>
         </article>
 
-        <article className={`rounded-3xl bg-gradient-to-br p-5 ring-1 ${metricTone("error")}`}>
+        <article className={`rounded-xl border p-5 ${metricTone("error")}`}>
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-rose-700">異常</span>
-            <FiXCircle className="h-5 w-5 text-rose-500" />
+            <span className="text-sm font-semibold text-rose-800">異常</span>
+            <FiXCircle className="h-5 w-5 text-rose-600" />
           </div>
-          <p className="mt-5 text-3xl font-semibold tracking-tight">{criticalCount}</p>
-          <p className="mt-2 text-sm text-rose-700/70">到達不可・実行エラー</p>
+          <p className="mt-4 text-3xl font-bold">{criticalCount}</p>
+          <p className="mt-1 text-xs text-rose-600/80">到達不可・実行エラー</p>
         </article>
       </section>
 
-      <section className="grid min-h-0 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
+      <section className="grid gap-6 lg:grid-cols-[3fr_2fr]">
+        <article className="flex flex-col gap-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Attention</p>
-              <h2 className="mt-2 text-lg font-semibold text-slate-950">注意アプリ</h2>
+              <h2 className="text-lg font-bold text-slate-900">注意が必要なアプリ</h2>
+              <p className="mt-0.5 text-xs text-slate-500">対応が推奨されるアプリケーション</p>
             </div>
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 transition hover:text-indigo-800"
               onClick={onOpenApplications}
             >
-              一覧へ
+              すべて見る
               <FiArrowRight className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="mt-4 grid gap-3">
-            {attentionApps.length === 0 ? <p className="text-sm text-slate-500">優先対応が必要なアプリはありません。</p> : null}
+          <div className="grid gap-3">
+            {attentionApps.length === 0 ? (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">優先対応が必要なアプリはありません。</p>
+            ) : null}
             {attentionApps.map((application) => {
               const health = healthMeta(application.health);
               return (
                 <button
                   key={application.application_id}
                   type="button"
-                  className="group rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white"
+                  className="group rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-indigo-300 hover:shadow-sm"
                   onClick={() => onOpenDetail(application.application_id)}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="truncate text-base font-semibold text-slate-950">{application.name}</span>
-                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                        <span className="truncate text-base font-bold text-slate-900 transition-colors group-hover:text-indigo-700">{application.name}</span>
+                        <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
                           {health.label}
                         </span>
                       </div>
-                      <p className="mt-1 truncate text-sm text-slate-500">{application.hostname}</p>
+                      <p className="mt-1 truncate font-mono text-sm text-slate-500">{application.hostname}</p>
                     </div>
-                    <FiExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition group-hover:text-slate-700" />
+                    <FiExternalLink className="h-4 w-4 shrink-0 text-slate-400 transition group-hover:text-indigo-500" />
                   </div>
-                  <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-700">{buildAttentionSummary(application)}</p>
+                  <p className="mt-3 line-clamp-2 text-sm text-slate-700">{buildAttentionSummary(application)}</p>
                   <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                     <span>{formatRelative(application.updated_at)}</span>
-                    {application.health?.response_time_ms ? <span>{application.health.response_time_ms}ms</span> : null}
                     <span>{shortCommit(application.current_commit)}</span>
+                    {application.health?.response_time_ms ? <span>{application.health.response_time_ms}ms</span> : null}
                   </div>
                 </button>
               );
@@ -139,46 +134,42 @@ export function HomeView(props: HomeViewProps) {
           </div>
         </article>
 
-        <div className="grid gap-4">
-          <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Failures</p>
-                <h2 className="mt-2 text-lg font-semibold text-slate-950">失敗ジョブ</h2>
-              </div>
-              <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700">{failedJobs.length}</span>
+        <div className="flex flex-col gap-6">
+          <article className="flex flex-col gap-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h2 className="text-sm font-bold text-slate-900">失敗したジョブ</h2>
+              <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-700">{failedJobs.length}</span>
             </div>
-            <div className="mt-4 space-y-3">
-              {failedJobs.length === 0 ? <p className="text-sm text-slate-500">失敗ジョブはありません。</p> : null}
+            <div className="space-y-2">
+              {failedJobs.length === 0 ? (
+                <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">失敗ジョブはありません。</p>
+              ) : null}
               {failedJobs.map((job) => (
-                <div key={job.job_id} className="rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-3">
-                  <p className="text-sm font-semibold text-slate-900">{job.application_name ?? "システム"}</p>
-                  <p className="mt-1 text-sm text-slate-600">{jobTypeLabel(job.type)}</p>
-                  {job.message ? <p className="mt-2 line-clamp-2 text-sm text-rose-800">{job.message}</p> : null}
+                <div key={job.job_id} className="rounded-lg border border-rose-200 bg-rose-50 p-3">
+                  <p className="text-sm font-bold text-slate-900">{job.application_name ?? "システム"}</p>
+                  <p className="mt-1 text-xs text-slate-600">{jobTypeLabel(job.type)}</p>
+                  {job.message ? <p className="mt-1 line-clamp-2 text-xs text-rose-700">{job.message}</p> : null}
                 </div>
               ))}
             </div>
           </article>
 
-          <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">New</p>
-                <h2 className="mt-2 text-lg font-semibold text-slate-950">最近追加</h2>
-              </div>
+          <article className="flex flex-col gap-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h2 className="text-sm font-bold text-slate-900">最近追加されたアプリ</h2>
               <FiClock className="h-4 w-4 text-slate-400" />
             </div>
-            <div className="mt-4 space-y-3">
+            <div className="space-y-2">
               {recentApps.map((application) => (
                 <button
                   key={application.application_id}
                   type="button"
-                  className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-left transition hover:border-slate-300 hover:bg-slate-50"
+                  className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-indigo-300 hover:bg-indigo-50/50"
                   onClick={() => onOpenDetail(application.application_id)}
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">{application.name}</p>
-                    <p className="mt-1 text-xs text-slate-500">{formatRelative(application.created_at)}</p>
+                    <p className="truncate text-sm font-bold text-slate-900">{application.name}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{formatRelative(application.created_at)}</p>
                   </div>
                   <FiArrowRight className="h-4 w-4 shrink-0 text-slate-400" />
                 </button>
@@ -188,37 +179,32 @@ export function HomeView(props: HomeViewProps) {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Events</p>
-            <h2 className="mt-2 text-lg font-semibold text-slate-950">直近イベント</h2>
-          </div>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{recentEvents.length}</span>
+      <section className="mt-2 flex flex-col gap-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <h2 className="text-lg font-bold text-slate-900">システムイベント</h2>
         </div>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {recentEvents.length === 0 ? <p className="text-sm text-slate-500">イベントはまだありません。</p> : null}
           {recentEvents.map((event) => (
-            <article key={event.event_id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <article key={event.event_id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">{event.title}</p>
-                  {event.application_name ? <p className="mt-1 text-xs text-slate-500">{event.application_name}</p> : null}
+                  <p className="truncate text-sm font-bold text-slate-900">{event.title}</p>
+                  {event.application_name ? <p className="mt-0.5 truncate text-xs text-slate-500">{event.application_name}</p> : null}
                 </div>
                 <span
-                  className={`rounded-full px-2 py-1 text-[11px] font-medium ${
+                  className={`rounded-md border px-2 py-0.5 text-xs font-medium ${
                     event.level === "error"
-                      ? "bg-rose-100 text-rose-700"
+                      ? "border-rose-200 bg-rose-50 text-rose-700"
                       : event.level === "warning"
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-emerald-100 text-emerald-700"
+                        ? "border-amber-200 bg-amber-50 text-amber-700"
+                        : "border-emerald-200 bg-emerald-50 text-emerald-700"
                   }`}
                 >
                   {event.level}
                 </span>
               </div>
-              <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-700">{event.message}</p>
+              <p className="mt-2 line-clamp-2 text-sm text-slate-600">{event.message}</p>
               <p className="mt-3 text-xs text-slate-500">{toLocale(event.created_at)}</p>
             </article>
           ))}
