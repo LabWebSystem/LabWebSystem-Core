@@ -40,12 +40,43 @@ interface KeyEvent {
   ctrl?: boolean;
 }
 
+interface LauncherConfig {
+  backendPort: number;
+  dashboardPort: number;
+  rootDomain: string | null;
+}
+
+interface MonitorTarget {
+  id: string;
+  label: string;
+  url: string;
+}
+
+interface MonitorEntry {
+  id: string;
+  label: string;
+  url: string;
+  level: "idle" | "up" | "warn" | "down";
+  statusCode: number | null;
+  latencyMs: number | null;
+  detail: string;
+}
+
+interface MonitorState {
+  config: LauncherConfig;
+  entries: MonitorEntry[];
+  checkedAt: string | null;
+  systemSummary: string | null;
+}
+
 const thisFile = fileURLToPath(import.meta.url);
 const projectRoot = path.resolve(path.dirname(thisFile), "..", "..");
 const packageJsonPath = path.join(projectRoot, "package.json");
+const envFilePath = path.join(projectRoot, "core", "backend", ".env");
 const SELF_SCRIPT_NAME = "launcher";
 const SEARCH_BACK = "__search_back__";
 const RESET = "\x1b[0m";
+const MONITOR_INTERVAL_MS = 3000;
 
 function wrap(code: string, text: string): string {
   return `${code}${text}${RESET}`;
@@ -110,6 +141,10 @@ function renderHotkey(key: string, label: string): string {
   return `${keyCapsule} ${muted(label)}`;
 }
 
+function info(text: string): string {
+  return fg(text, 121, 192, 255);
+}
+
 function toDisplayPath(scriptName: string): string {
   return scriptName.replaceAll(":", "/");
 }
@@ -137,6 +172,219 @@ function ensureTty(): void {
     console.error("[launcher] ターミナル上で `yarn run launcher` を実行してください。");
     process.exit(1);
   }
+}
+
+function toPort(value: string | undefined, defaultValue: number): number {
+  const parsed = Number(value);
+  if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535) {
+    return parsed;
+  }
+  return defaultValue;
+}
+
+function parseEnvEntries(raw: string): Record<string, string> {
+  const entries: Record<string, string> = {};
+
+  for (const rawLine of raw.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line.length === 0 || line.startsWith("#")) {
+      continue;
+    }
+
+    const normalized = line.startsWith("export ") ? line.slice("export ".length).trim() : line;
+    const separatorIndex = normalized.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = normalized.slice(0, separatorIndex).trim();
+    let value = normalized.slice(separatorIndex + 1).trim();
+    if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) {
+      value = value.slice(1, -1);
+    }
+    entries[key] = value;
+  }
+
+  return entries;
+}
+
+function loadLauncherConfig(): LauncherConfig {
+  try {
+    const raw = readFileSync(envFilePath, "utf8");
+    const entries = parseEnvEntries(raw);
+    return {
+      backendPort: toPort(entries.LAB_CORE_PORT, 7300),
+      dashboardPort: 5173,
+      rootDomain: entries.LAB_CORE_ROOT_DOMAIN?.trim() || null
+    };
+  } catch {
+    return {
+      backendPort: 7300,
+      dashboardPort: 5173,
+      rootDomain: null
+    };
+  }
+}
+
+function buildMonitorTargets(config: LauncherConfig): MonitorTarget[] {
+  const targets: MonitorTarget[] = [
+    {
+      id: "local-backend-health",
+      label: "Local Backend Health",
+      url: `http://127.0.0.1:${config.backendPort}/health`
+    },
+    {
+      id: "local-system-status",
+      label: "Local System Status",
+      url: `http://127.0.0.1:${config.backendPort}/api/system/status`
+    },
+    {
+      id: "local-dashboard",
+      label: "Local Dashboard",
+      url: `http://127.0.0.1:${config.dashboardPort}/`
+    }
+  ];
+
+  if (config.rootDomain) {
+    targets.push(
+      {
+        id: "routed-dashboard",
+        label: "Routed Dashboard",
+        url: `http://dashboard.${config.rootDomain}/`
+      },
+      {
+        id: "routed-api-status",
+        label: "Routed API Status",
+        url: `http://api.${config.rootDomain}/api/system/status`
+      }
+    );
+  }
+
+  return targets;
+}
+
+function summarizeSystemStatus(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const data = payload as {
+    applicationSummary?: { total?: number; running?: number; degraded?: number; failed?: number };
+    jobSummary?: { queued?: number; running?: number };
+    dnsServer?: { enabled?: boolean; udpListening?: boolean; tcpListening?: boolean; lastError?: string | null };
+    execution?: { mode?: string };
+  };
+
+  const total = data.applicationSummary?.total;
+  const running = data.applicationSummary?.running;
+  const degraded = data.applicationSummary?.degraded;
+  const failed = data.applicationSummary?.failed;
+  const queuedJobs = data.jobSummary?.queued;
+  const runningJobs = data.jobSummary?.running;
+  const executionMode = data.execution?.mode;
+  const dnsEnabled = data.dnsServer?.enabled;
+  const udpListening = data.dnsServer?.udpListening;
+  const tcpListening = data.dnsServer?.tcpListening;
+
+  const parts: string[] = [];
+  if (typeof executionMode === "string") {
+    parts.push(`mode=${executionMode}`);
+  }
+  if (typeof total === "number" && typeof running === "number") {
+    parts.push(`apps=${running}/${total}`);
+  }
+  if (typeof degraded === "number" && degraded > 0) {
+    parts.push(`degraded=${degraded}`);
+  }
+  if (typeof failed === "number" && failed > 0) {
+    parts.push(`failed=${failed}`);
+  }
+  if (typeof runningJobs === "number" || typeof queuedJobs === "number") {
+    parts.push(`jobs=${runningJobs ?? 0} running / ${queuedJobs ?? 0} queued`);
+  }
+  if (dnsEnabled) {
+    parts.push(`dns=${udpListening ? "udp:on" : "udp:off"} ${tcpListening ? "tcp:on" : "tcp:off"}`);
+  }
+
+  return parts.length > 0 ? parts.join(" | ") : null;
+}
+
+async function probeMonitorTarget(target: MonitorTarget): Promise<{ entry: MonitorEntry; summary: string | null }> {
+  const controller = new AbortController();
+  const startedAt = Date.now();
+  const timeout = setTimeout(() => controller.abort(), 1200);
+
+  try {
+    const response = await fetch(target.url, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json,text/html;q=0.9,*/*;q=0.8"
+      }
+    });
+
+    const latencyMs = Date.now() - startedAt;
+    let summary: string | null = null;
+
+    if (response.ok && target.url.endsWith("/api/system/status")) {
+      const contentType = response.headers.get("content-type") ?? "";
+      if (contentType.includes("application/json")) {
+        summary = summarizeSystemStatus(await response.json().catch(() => null));
+      }
+    } else if (response.ok && target.url.endsWith("/health")) {
+      await response.text().catch(() => "");
+    }
+
+    return {
+      entry: {
+        id: target.id,
+        label: target.label,
+        url: target.url,
+        level: response.ok ? "up" : "warn",
+        statusCode: response.status,
+        latencyMs,
+        detail: response.ok ? "OK" : `HTTP ${response.status}`
+      },
+      summary
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      entry: {
+        id: target.id,
+        label: target.label,
+        url: target.url,
+        level: "down",
+        statusCode: null,
+        latencyMs: Date.now() - startedAt,
+        detail: message
+      },
+      summary: null
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function formatCheckedAt(date: Date): string {
+  return new Intl.DateTimeFormat("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).format(date);
+}
+
+function idleMonitorEntry(target: MonitorTarget): MonitorEntry {
+  return {
+    id: target.id,
+    label: target.label,
+    url: target.url,
+    level: "idle",
+    statusCode: null,
+    latencyMs: null,
+    detail: "監視待機中"
+  };
 }
 
 function loadScripts(): ScriptEntry[] {
@@ -221,7 +469,49 @@ function flattenVisibleItems(root: TreeNode, expanded: Set<string>): VisibleItem
   return items;
 }
 
-function renderMenu(items: VisibleItem[], selectedIndex: number, expanded: Set<string>, totalCommands: number): void {
+function monitorChip(entry: MonitorEntry): string {
+  if (entry.level === "up") {
+    return bg(fg(" UP ", 14, 39, 24), 110, 227, 150);
+  }
+  if (entry.level === "warn") {
+    return bg(fg(" WARN ", 54, 31, 0), 255, 196, 94);
+  }
+  if (entry.level === "down") {
+    return bg(fg(" DOWN ", 255, 238, 240), 207, 74, 93);
+  }
+  return bg(fg(" WAIT ", 34, 39, 53), 174, 187, 214);
+}
+
+function renderMonitor(state: MonitorState, width: number): void {
+  const summaryChip = bg(fg(` refresh ${MONITOR_INTERVAL_MS / 1000}s `, 232, 242, 255), 35, 72, 158);
+  const configLabel = state.config.rootDomain ? `root=${state.config.rootDomain}` : "rootDomain 未設定";
+  console.log(`${info("Live Monitor")}  ${summaryChip}  ${muted(configLabel)}`);
+
+  if (state.systemSummary) {
+    console.log(`${muted("Summary")}   ${truncate(state.systemSummary, Math.max(20, width - 14))}`);
+  } else {
+    console.log(`${muted("Summary")}   ${muted("system status 未取得")}`);
+  }
+
+  for (const entry of state.entries) {
+    const latency = typeof entry.latencyMs === "number" ? `${entry.latencyMs}ms` : "-";
+    const statusText = entry.statusCode ? `${entry.detail} / ${latency}` : `${entry.detail} / ${latency}`;
+    const left = `${monitorChip(entry)} ${bold(entry.label)}`;
+    const right = `${muted(statusText)}  ${entry.url}`;
+    console.log(`${left} ${truncate(right, Math.max(24, width - stripAnsi(left).length - 1))}`);
+  }
+
+  const checked = state.checkedAt ? state.checkedAt : "未更新";
+  console.log(`${muted("Last")}      ${checked}`);
+}
+
+function renderMenu(
+  items: VisibleItem[],
+  selectedIndex: number,
+  expanded: Set<string>,
+  totalCommands: number,
+  monitorState: MonitorState
+): void {
   process.stdout.write("\x1b[2J\x1b[0f");
   const width = lineWidth();
   const rule = muted("─".repeat(width));
@@ -234,6 +524,7 @@ function renderMenu(items: VisibleItem[], selectedIndex: number, expanded: Set<s
     renderHotkey("←/→", "開閉"),
     renderHotkey("Enter", "実行"),
     renderHotkey("/", "検索"),
+    renderHotkey("r", "監視更新"),
     renderHotkey("q", "終了")
   ].join(`  ${dim("•")}  `);
 
@@ -279,6 +570,8 @@ function renderMenu(items: VisibleItem[], selectedIndex: number, expanded: Set<s
     console.log(`${warning("Selected Group")}  ${bold(selected.node.fullName)}`);
     console.log(`${muted("Hint")}      ${renderHotkey("→", "展開")}  ${renderHotkey("←", "折りたたみ")}`);
   }
+  console.log(rule);
+  renderMonitor(monitorState, width);
   console.log(rule);
 }
 
@@ -385,6 +678,14 @@ async function main(): Promise<void> {
   let selectedIndex = 0;
   let items = flattenVisibleItems(root, expanded);
   let closed = false;
+  let monitorRefreshing = false;
+  let monitorTimer: NodeJS.Timeout | null = null;
+  let monitorState: MonitorState = {
+    config: loadLauncherConfig(),
+    entries: buildMonitorTargets(loadLauncherConfig()).map((target) => idleMonitorEntry(target)),
+    checkedAt: null,
+    systemSummary: null
+  };
 
   const refreshAndRender = (): void => {
     items = flattenVisibleItems(root, expanded);
@@ -395,7 +696,39 @@ async function main(): Promise<void> {
     if (selectedIndex >= items.length) {
       selectedIndex = items.length - 1;
     }
-    renderMenu(items, selectedIndex, expanded, entries.length);
+    renderMenu(items, selectedIndex, expanded, entries.length, monitorState);
+  };
+
+  const refreshMonitor = async (): Promise<void> => {
+    if (monitorRefreshing || closed) {
+      return;
+    }
+
+    monitorRefreshing = true;
+    const config = loadLauncherConfig();
+    const targets = buildMonitorTargets(config);
+
+    try {
+      const results = await Promise.all(targets.map((target) => probeMonitorTarget(target)));
+      monitorState = {
+        config,
+        entries: results.map((result) => result.entry),
+        checkedAt: formatCheckedAt(new Date()),
+        systemSummary: results.map((result) => result.summary).find((summary) => summary) ?? null
+      };
+    } catch {
+      monitorState = {
+        config,
+        entries: targets.map((target) => idleMonitorEntry(target)),
+        checkedAt: formatCheckedAt(new Date()),
+        systemSummary: null
+      };
+    } finally {
+      monitorRefreshing = false;
+      if (!closed) {
+        refreshAndRender();
+      }
+    }
   };
 
   const stopRawInput = (): void => {
@@ -416,6 +749,10 @@ async function main(): Promise<void> {
       return;
     }
     closed = true;
+    if (monitorTimer) {
+      clearInterval(monitorTimer);
+      monitorTimer = null;
+    }
     stopRawInput();
     process.stdout.write("\n");
   };
@@ -427,6 +764,7 @@ async function main(): Promise<void> {
       console.error(`[launcher] yarn run ${scriptName} は終了コード ${status} で終了しました。`);
     }
     startRawInput();
+    void refreshMonitor();
     refreshAndRender();
   };
 
@@ -442,6 +780,7 @@ async function main(): Promise<void> {
       }
     } finally {
       startRawInput();
+      void refreshMonitor();
       refreshAndRender();
     }
   };
@@ -463,11 +802,11 @@ async function main(): Promise<void> {
         return;
       case "up":
         selectedIndex = selectedIndex <= 0 ? items.length - 1 : selectedIndex - 1;
-        renderMenu(items, selectedIndex, expanded, entries.length);
+        renderMenu(items, selectedIndex, expanded, entries.length, monitorState);
         return;
       case "down":
         selectedIndex = selectedIndex >= items.length - 1 ? 0 : selectedIndex + 1;
-        renderMenu(items, selectedIndex, expanded, entries.length);
+        renderMenu(items, selectedIndex, expanded, entries.length, monitorState);
         return;
       case "right": {
         const current = items[selectedIndex];
@@ -503,6 +842,9 @@ async function main(): Promise<void> {
       case "/":
         void openSearch();
         return;
+      case "r":
+        void refreshMonitor();
+        return;
       default:
         return;
     }
@@ -510,7 +852,11 @@ async function main(): Promise<void> {
 
   console.log(`[launcher] ${entries.length} 件のコマンドを読み込みました。`);
   startRawInput();
+  monitorTimer = setInterval(() => {
+    void refreshMonitor();
+  }, MONITOR_INTERVAL_MS);
   refreshAndRender();
+  void refreshMonitor();
 
   await new Promise<void>((resolve) => {
     const checkClosed = (): void => {

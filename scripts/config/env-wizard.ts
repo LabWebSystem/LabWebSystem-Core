@@ -204,15 +204,15 @@ function apiUrl(values) {
 
 function pickStartCommand(selectedProfile, values) {
   if (selectedProfile === "lab") {
-    return "yarn lab:up";
+    return "yarn environment:lab:up";
   }
   if (selectedProfile === "local") {
-    return "yarn dev";
+    return "yarn environment:dev:up";
   }
   if (values.LAB_CORE_MAIN_SERVICE_IP === "127.0.0.1" || values.LAB_CORE_ROOT_DOMAIN.endsWith(".localhost")) {
-    return "yarn dev";
+    return "yarn environment:dev:up";
   }
-  return "yarn lab:up";
+  return "yarn environment:lab:up";
 }
 
 function nextSteps(selectedProfile, values) {
@@ -223,7 +223,7 @@ function nextSteps(selectedProfile, values) {
     `3) ${apiUrl(values)} を確認する`
   ];
 
-  if (startCommand === "yarn lab:up") {
+  if (startCommand === "yarn environment:lab:up") {
     steps.push(`4) クライアント側の DNS を ${values.LAB_CORE_MAIN_SERVICE_IP} へ向ける`);
   }
 
@@ -243,7 +243,7 @@ function nowStamp() {
 
 function buildTemplate(profileName, values) {
   return `# Lab-Core backend runtime configuration
-# generated_by: yarn config:${command}
+# generated_by: yarn config:set
 # generated_at: ${new Date().toISOString()}
 # profile: ${profileName}
 

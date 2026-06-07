@@ -157,6 +157,84 @@ async function runConfigCommand(): Promise<void> {
   });
 }
 
+function ensureConfigFileExists(commandName: string): void {
+  if (fs.existsSync(backendEnvPath)) {
+    return;
+  }
+
+  console.error(`[${commandName}] core/backend/.env が見つかりません。`);
+  console.error(`[${commandName}] 先に \`yarn config:set\` を実行してください。`);
+  process.exit(1);
+}
+
+function runConfigShowCommand(): void {
+  ensureConfigFileExists("config:show");
+
+  if (!process.stdout.isTTY) {
+    run("cat", [backendEnvPath]);
+    return;
+  }
+
+  run(
+    "bash",
+    [
+      "-lc",
+      [
+        "if [ -n \"${PAGER:-}\" ]; then",
+        "  eval \"exec $PAGER \\\"\\$1\\\"\"",
+        "fi",
+        "if command -v less >/dev/null 2>&1; then",
+        "  exec less -FRX \"$1\"",
+        "fi",
+        "if command -v more >/dev/null 2>&1; then",
+        "  exec more \"$1\"",
+        "fi",
+        "exec cat \"$1\""
+      ].join("\n"),
+      "bash",
+      backendEnvPath
+    ]
+  );
+}
+
+function runConfigEditCommand(): void {
+  ensureConfigFileExists("config:edit");
+
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    console.error("[config:edit] エディタ起動にはTTYが必要です。");
+    console.error("[config:edit] ターミナルで再実行してください。");
+    process.exit(1);
+  }
+
+  run(
+    "bash",
+    [
+      "-lc",
+      [
+        "if [ -n \"${VISUAL:-}\" ]; then",
+        "  eval \"exec $VISUAL \\\"\\$1\\\"\"",
+        "fi",
+        "if [ -n \"${EDITOR:-}\" ]; then",
+        "  eval \"exec $EDITOR \\\"\\$1\\\"\"",
+        "fi",
+        "if command -v vim >/dev/null 2>&1; then",
+        "  exec vim \"$1\"",
+        "fi",
+        "if command -v vi >/dev/null 2>&1; then",
+        "  exec vi \"$1\"",
+        "fi",
+        "if command -v nano >/dev/null 2>&1; then",
+        "  exec nano \"$1\"",
+        "fi",
+        "echo \"[config:edit] 利用可能なエディタが見つかりません。VISUAL または EDITOR を設定してください。\" >&2",
+        "exit 1"
+      ].join("\n"),
+      "bash",
+      backendEnvPath
+    ]
+  );
+}
+
 const commands: Record<string, CommandHandler> = {
   "environment:dev:up": () => kernelUp(),
   "environment:dev:down": () => kernelDown(),
@@ -164,6 +242,9 @@ const commands: Record<string, CommandHandler> = {
   "environment:lab:up": () => runWithEnv(labEnv, () => kernelUp({ env: labEnv })),
   "environment:lab:down": () => runWithEnv(labEnv, () => kernelDown({ env: labEnv })),
   "environment:lab:logs": () => runTsScript("scripts/dev/stream-kernel-logs.ts"),
+  "config:set": () => runConfigCommand(),
+  "config:show": () => runConfigShowCommand(),
+  "config:edit": () => runConfigEditCommand(),
   "service:backend:up": () => run("corepack", ["yarn", "workspace", "@lab-core/backend", "dev"]),
   "service:dashboard:up": () => run("corepack", ["yarn", "workspace", "@lab-core/dashboard", "dev"]),
   "quality:build": () => {
@@ -173,7 +254,6 @@ const commands: Record<string, CommandHandler> = {
   "quality:typecheck:scripts": () => run("corepack", ["yarn", "tsc", "-p", "tsconfig.scripts.json"]),
   "quality:test:fixtures": () => run("bash", ["scripts/testing/register_app_fixtures.sh"]),
   "quality:test:smoke": () => run("bash", ["scripts/testing/run_full_system_smoke_test.sh"]),
-  config: () => runConfigCommand(),
   destroy: () => runTsScript("scripts/maintenance/reset-lab-core.ts")
 };
 

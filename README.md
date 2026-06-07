@@ -21,14 +21,17 @@
 
 ## クイックスタート
 1. `yarn install`
-2. `yarn config`
+2. `yarn config:set`
 3. 開発: `yarn environment:dev:up`
 4. 研究室運用: `yarn environment:lab:up`
 5. `http://dashboard.<LAB_CORE_ROOT_DOMAIN>/` を開く
 
 ## 公開コマンド（現行）
 - ランチャー: `yarn launcher`
-- 設定: `yarn config`
+- 設定:
+  - `yarn config:set`
+  - `yarn config:show`
+  - `yarn config:edit`
 - 一括起動/停止/ログ（開発）:
   - `yarn environment:dev:up`
   - `yarn environment:dev:down`

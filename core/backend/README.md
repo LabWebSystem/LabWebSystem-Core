@@ -50,7 +50,7 @@
 
 ## 開発コマンド（ルート実行）
 1. `yarn install`
-2. `yarn config`
+2. `yarn config:set`
 3. backend 単体: `yarn service:backend:up`
 4. 全体起動（推奨）: `yarn environment:dev:up`
 

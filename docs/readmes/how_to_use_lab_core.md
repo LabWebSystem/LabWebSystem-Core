@@ -8,7 +8,7 @@
 
 ## 2. 起動手順
 1. `yarn install`
-2. `yarn config`
+2. `yarn config:set`
 3. 開発環境: `yarn environment:dev:up`
 4. 研究室運用: `yarn environment:lab:up`
 5. ブラウザで `http://dashboard.<LAB_CORE_ROOT_DOMAIN>/` を開く
@@ -89,8 +89,8 @@
 - スモークテスト: `yarn quality:test:smoke`
 
 ## 9. 既知注意点
-- `quality:test:smoke` は現状、内部スクリプトに旧コマンド参照が残っており、そのままでは失敗する場合があります。
-- 設定は `yarn config` を使用し、旧 `config:init` / `config:reset` は使いません。
+- `quality:test:smoke` は backend 起動後の GitHub リポジトリ取得で認証が必要な場合があります。
+- 設定変更は `yarn config:set`、確認は `yarn config:show`、直接編集は `yarn config:edit` を使用します。
 
 ## 10. 参考資料
 - 正式仕様: `docs/20260516_230913_公式仕様統合/official_specification.md`
