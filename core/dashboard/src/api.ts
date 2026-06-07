@@ -16,6 +16,46 @@ import type {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function validateImportResolveResponse(payload: unknown): ImportResolveResponse {
+  if (!isRecord(payload)) {
+    throw new Error("URL解析レスポンスの形式が不正です。");
+  }
+
+  if (!isRecord(payload.manifest)) {
+    throw new Error("labcore.app.yaml の情報がレスポンスに含まれていません。backend を再起動してもう一度試してください。");
+  }
+
+  const manifest = payload.manifest;
+  if (
+    !isRecord(manifest.app) ||
+    !isRecord(manifest.deployment) ||
+    !isRecord(manifest.exposure) ||
+    !isRecord(manifest.devices) ||
+    !isRecord(manifest.env) ||
+    !hasString(payload.manifestPath) ||
+    !hasString(payload.canonicalRepositoryUrl) ||
+    !hasString(payload.resolvedBranch) ||
+    !hasString(manifest.app.name) ||
+    typeof manifest.app.description !== "string" ||
+    !hasString(manifest.deployment.composePath) ||
+    !hasString(manifest.exposure.service) ||
+    typeof manifest.exposure.port !== "number" ||
+    !hasString(manifest.exposure.hostname)
+  ) {
+    throw new Error("labcore.app.yaml のレスポンス形式が不正です。backend の更新状態を確認してください。");
+  }
+
+  return payload as ImportResolveResponse;
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
@@ -79,10 +119,11 @@ export async function inspectApplicationDeploymentCompose(
 }
 
 export async function resolveImportSource(sourceUrl: string): Promise<ImportResolveResponse> {
-  return requestJson<ImportResolveResponse>("/api/applications/import/resolve", {
+  const response = await requestJson<unknown>("/api/applications/import/resolve", {
     method: "POST",
     body: JSON.stringify({ sourceUrl })
   });
+  return validateImportResolveResponse(response);
 }
 
 export async function inspectComposeFile(

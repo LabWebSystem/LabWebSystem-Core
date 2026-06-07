@@ -537,6 +537,10 @@ export function App() {
   }
 
   function applyResolveResult(result: ImportResolveResponse): void {
+    if (!result.manifest) {
+      throw new Error("labcore.app.yaml の解析結果が取得できませんでした。backend を再起動して再試行してください。");
+    }
+
     setResolveState({
       status: "resolved",
       canonicalRepositoryUrl: result.canonicalRepositoryUrl,
