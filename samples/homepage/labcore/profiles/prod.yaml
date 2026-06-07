@@ -1,9 +1,0 @@
-profile: prod
-overrides:
-  env: {}
-  composeFiles:
-    - docker-compose.yml
-  deviceRequirements: []
-  guard:
-    allowMock: false
-    requireDevicePaths: []

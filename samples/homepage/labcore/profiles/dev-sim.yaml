@@ -1,9 +1,0 @@
-profile: dev-sim
-overrides:
-  env: {}
-  composeFiles:
-    - docker-compose.yml
-  deviceRequirements: []
-  guard:
-    allowMock: true
-    requireDevicePaths: []

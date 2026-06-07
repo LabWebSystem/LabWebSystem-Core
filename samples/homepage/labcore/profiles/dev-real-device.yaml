@@ -1,9 +1,0 @@
-profile: dev-real-device
-overrides:
-  env: {}
-  composeFiles:
-    - docker-compose.yml
-  deviceRequirements: []
-  guard:
-    allowMock: false
-    requireDevicePaths: []
