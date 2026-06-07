@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { db } from "../lib/db.js";
 import { executeUpdateCheckJob } from "../services/application-update-check.js";
 import {
@@ -241,8 +241,12 @@ jobsRouter.post("/:jobId/cancel", (c) => {
   });
 });
 
-jobsRouter.delete("/:jobId", (c) => {
+function deleteJobFromQueue(c: Context) {
   const jobId = c.req.param("jobId");
+  if (!jobId) {
+    return c.json({ message: "対象ジョブが指定されていません。" }, 400);
+  }
+
   const job = db
     .prepare(
       `
@@ -270,4 +274,7 @@ jobsRouter.delete("/:jobId", (c) => {
     jobId,
     message: "ジョブをキューから削除しました。"
   });
-});
+}
+
+jobsRouter.post("/:jobId/delete", deleteJobFromQueue);
+jobsRouter.delete("/:jobId", deleteJobFromQueue);

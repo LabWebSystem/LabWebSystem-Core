@@ -212,8 +212,8 @@ export async function cancelJob(jobId: string): Promise<void> {
 }
 
 export async function deleteJob(jobId: string): Promise<void> {
-  await requestJson(`/api/jobs/${jobId}`, {
-    method: "DELETE"
+  await requestJson(`/api/jobs/${jobId}/delete`, {
+    method: "POST"
   });
 }
 
