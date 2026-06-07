@@ -24,6 +24,16 @@ function metricTone(kind: "ok" | "warn" | "error" | "neutral"): string {
   return "bg-slate-50 text-slate-900 border-slate-200";
 }
 
+function eventTone(level: SystemEvent["level"]): string {
+  if (level === "error") {
+    return "border-rose-200 bg-rose-50 text-rose-700";
+  }
+  if (level === "warning") {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+  return "border-emerald-200 bg-emerald-50 text-emerald-700";
+}
+
 export function HomeView(props: HomeViewProps) {
   const { system, applications, jobs, events, onOpenApplications, onOpenDetail } = props;
 
@@ -37,7 +47,7 @@ export function HomeView(props: HomeViewProps) {
     })
     .slice(0, 6);
   const failedJobs = jobs.filter((job) => job.status === "failed").slice(0, 5);
-  const recentEvents = [...events].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 7);
+  const recentEvents = [...events].sort((a, b) => a.created_at.localeCompare(b.created_at)).slice(-10);
   const recentApps = [...applications].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 5);
 
   return (
@@ -181,33 +191,54 @@ export function HomeView(props: HomeViewProps) {
 
       <section className="mt-2 flex flex-col gap-4">
         <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-          <h2 className="text-lg font-bold text-slate-900">システムイベント</h2>
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">システムイベント</h2>
+            <p className="mt-0.5 text-xs text-slate-500">直近のイベントを発生順に並べています</p>
+          </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-xl border border-slate-200 bg-white">
           {recentEvents.length === 0 ? <p className="text-sm text-slate-500">イベントはまだありません。</p> : null}
-          {recentEvents.map((event) => (
-            <article key={event.event_id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-slate-900">{event.title}</p>
-                  {event.application_name ? <p className="mt-0.5 truncate text-xs text-slate-500">{event.application_name}</p> : null}
-                </div>
-                <span
-                  className={`rounded-md border px-2 py-0.5 text-xs font-medium ${
-                    event.level === "error"
-                      ? "border-rose-200 bg-rose-50 text-rose-700"
-                      : event.level === "warning"
-                        ? "border-amber-200 bg-amber-50 text-amber-700"
-                        : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  }`}
-                >
-                  {event.level}
-                </span>
-              </div>
-              <p className="mt-2 line-clamp-2 text-sm text-slate-600">{event.message}</p>
-              <p className="mt-3 text-xs text-slate-500">{toLocale(event.created_at)}</p>
-            </article>
-          ))}
+          {recentEvents.length === 0 ? null : (
+            <div className="divide-y divide-slate-200">
+              {recentEvents.map((event, index) => (
+                <article key={event.event_id} className="grid gap-3 px-4 py-4 md:grid-cols-[148px_minmax(0,1fr)] md:px-5">
+                  <div className="flex items-start gap-3 md:block">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+                        {index + 1}
+                      </span>
+                      <div className="min-w-0 md:hidden">
+                        <p className="text-xs font-medium text-slate-500">{toLocale(event.created_at)}</p>
+                        <p className="mt-0.5 text-[11px] uppercase tracking-[0.18em] text-slate-400">{event.scope ?? "system"}</p>
+                      </div>
+                    </div>
+                    <div className="hidden md:block">
+                      <p className="text-xs font-medium text-slate-500">{toLocale(event.created_at)}</p>
+                      <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-400">{event.scope ?? "system"}</p>
+                    </div>
+                  </div>
+
+                  <div className="relative min-w-0 pl-5 md:pl-6">
+                    <div className="absolute bottom-0 left-[7px] top-0 w-px bg-slate-200 md:left-2" aria-hidden="true" />
+                    <div className="absolute left-0 top-2 h-3.5 w-3.5 rounded-full border-2 border-white bg-slate-400 shadow-sm md:left-[1px]" aria-hidden="true" />
+
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-900">{event.title}</p>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                          {event.application_name ? <span>{event.application_name}</span> : null}
+                          {event.scope ? <span>scope: {event.scope}</span> : null}
+                        </div>
+                      </div>
+                      <span className={`shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium ${eventTone(event.level)}`}>{event.level}</span>
+                    </div>
+
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{event.message}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </div>
