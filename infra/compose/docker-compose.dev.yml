@@ -11,6 +11,7 @@ services:
     image: node:20-alpine
     working_dir: ${LAB_CORE_HOST_PROJECT_ROOT:-/workspace}
     command: sh -lc "apk add --no-cache git docker-cli docker-cli-compose && corepack yarn service:backend:up"
+    restart: unless-stopped
     volumes:
       - ${LAB_CORE_HOST_PROJECT_ROOT:-../../}:${LAB_CORE_HOST_PROJECT_ROOT:-/workspace}
       - labcore_node_modules:${LAB_CORE_HOST_PROJECT_ROOT:-/workspace}/node_modules
@@ -22,6 +23,7 @@ services:
     image: node:20-alpine
     working_dir: ${LAB_CORE_HOST_PROJECT_ROOT:-/workspace}
     command: sh -lc "corepack yarn workspace @lab-core/dashboard build && corepack yarn workspace @lab-core/dashboard preview --host 0.0.0.0 --port 4173"
+    restart: unless-stopped
     volumes:
       - ${LAB_CORE_HOST_PROJECT_ROOT:-../../}:${LAB_CORE_HOST_PROJECT_ROOT:-/workspace}
       - labcore_node_modules:${LAB_CORE_HOST_PROJECT_ROOT:-/workspace}/node_modules

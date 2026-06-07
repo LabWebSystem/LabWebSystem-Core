@@ -31,6 +31,11 @@
 - 開発環境: `yarn environment:dev:logs`
 - 研究室運用: `yarn environment:lab:logs`
 
+自動復帰:
+- `backend` / `dashboard` / `proxy` / `dns` には `restart: unless-stopped` を設定しています。
+- サーバー再起動後も、手動停止していない限り Docker により自動起動されます。
+- `deps` はワンショット用途のため自動再起動対象にしていません。
+
 ## 3. 画面の見方
 ### 3.1 ホーム
 - `登録アプリ`

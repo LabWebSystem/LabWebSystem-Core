@@ -3,6 +3,7 @@ name: labcore-dev-proxy
 services:
   proxy:
     image: caddy:2-alpine
+    restart: unless-stopped
     ports:
       - "${LAB_CORE_PROXY_HTTP_BIND:-127.0.0.1:80}:80/tcp"
     extra_hosts:
