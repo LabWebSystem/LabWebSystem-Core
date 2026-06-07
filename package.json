@@ -11,9 +11,6 @@
     "@inquirer/prompts": "^7.10.1"
   },
   "scripts": {
-    "sdk:labcore": "corepack yarn workspace @lab-core/sdk-cli run cli",
-    "sdk:build": "corepack yarn workspace @lab-core/sdk-monorepo run build",
-    "sdk:test": "corepack yarn workspace @lab-core/sdk-monorepo run test",
     "launcher": "corepack yarn tsx scripts/tasks/interactive-tasks.ts",
     "config:set": "corepack yarn tsx scripts/dev/root-command.ts config:set",
     "config:show": "corepack yarn tsx scripts/dev/root-command.ts config:show",
