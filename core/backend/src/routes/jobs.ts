@@ -11,7 +11,7 @@ import {
   executeStopJob,
   executeUpdateJob
 } from "../services/application-jobs.js";
-import { cancelQueuedJob, createJobWithPayload, getActiveJobForApplication } from "../services/jobs.js";
+import { cancelQueuedJob, createJobWithPayload, deleteFinishedJob, getActiveJobForApplication } from "../services/jobs.js";
 
 export const jobsRouter = new Hono();
 
@@ -138,7 +138,8 @@ jobsRouter.get("/", (c) => {
       ...job,
       request_payload: parseJobPayload(job.request_payload),
       retryable: job.status === "failed" && job.related_application_id !== null,
-      cancellable: job.status === "queued"
+      cancellable: job.status === "queued",
+      dismissible: ["succeeded", "failed", "cancelled"].includes(job.status)
     }))
   });
 });
@@ -237,5 +238,36 @@ jobsRouter.post("/:jobId/cancel", (c) => {
   return c.json({
     jobId,
     message: "待機中ジョブをキャンセルしました。"
+  });
+});
+
+jobsRouter.delete("/:jobId", (c) => {
+  const jobId = c.req.param("jobId");
+  const job = db
+    .prepare(
+      `
+        SELECT job_id, status
+        FROM jobs
+        WHERE job_id = ?
+      `
+    )
+    .get(jobId) as { job_id: string; status: string } | undefined;
+
+  if (!job) {
+    return c.json({ message: "対象ジョブが見つかりません。" }, 404);
+  }
+
+  if (job.status === "queued" || job.status === "running") {
+    return c.json({ message: "進行中または待機中のジョブは削除できません。" }, 409);
+  }
+
+  const deleted = deleteFinishedJob(jobId);
+  if (!deleted) {
+    return c.json({ message: "ジョブを削除できませんでした。" }, 409);
+  }
+
+  return c.json({
+    jobId,
+    message: "ジョブをキューから削除しました。"
   });
 });

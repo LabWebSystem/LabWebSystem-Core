@@ -211,6 +211,12 @@ export async function cancelJob(jobId: string): Promise<void> {
   });
 }
 
+export async function deleteJob(jobId: string): Promise<void> {
+  await requestJson(`/api/jobs/${jobId}`, {
+    method: "DELETE"
+  });
+}
+
 export async function fetchRegistrationFixtures(): Promise<RegistrationFixture[]> {
   const response = await requestJson<{ fixtures: RegistrationFixture[] }>("/api/testing/registration-fixtures");
   return response.fixtures;

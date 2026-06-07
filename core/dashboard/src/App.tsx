@@ -4,6 +4,7 @@ import {
   cancelJob,
   checkUpdate,
   createApplication,
+  deleteJob,
   deleteApplication,
   fetchApplicationDetail,
   fetchJobs,
@@ -952,6 +953,10 @@ export function App() {
     await runAction(async () => cancelJob(jobId), "待機中ジョブをキャンセルしました。");
   }
 
+  async function onDeleteJob(jobId: string): Promise<void> {
+    await runAction(async () => deleteJob(jobId), "ジョブをキューから削除しました。");
+  }
+
   return (
     <DashboardShell
       activeView={activeView}
@@ -974,6 +979,7 @@ export function App() {
           onOpenDetail={openDetail}
           onRetryJob={(jobId, typeLabel) => void onRetryJob(jobId, typeLabel)}
           onCancelJob={(jobId) => void onCancelJob(jobId)}
+          onDeleteJob={(jobId) => void onDeleteJob(jobId)}
         />
       }
     >

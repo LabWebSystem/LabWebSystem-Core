@@ -43,7 +43,7 @@ export function DashboardShell(props: DashboardShellProps) {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(228,240,247,0.95),_rgba(240,246,250,0.85)_32%,_rgba(247,244,239,0.92)_100%)] text-slate-900">
-      <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col gap-4 px-3 py-3 md:px-5 md:py-5">
+      <div className="flex min-h-screen w-full flex-col gap-3 px-2 py-2 md:px-3 md:py-3">
         <header className="rounded-[28px] border border-white/70 bg-white/85 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur-xl">
           <div className="flex flex-col gap-4 px-5 py-4 md:flex-row md:items-center md:justify-between md:px-6">
             <div className="min-w-0">
@@ -121,7 +121,7 @@ export function DashboardShell(props: DashboardShellProps) {
           })}
         </nav>
 
-        <main className="min-h-0 flex-1 overflow-hidden rounded-[30px] border border-white/70 bg-white/80 p-4 shadow-[0_24px_56px_rgba(15,23,42,0.08)] backdrop-blur-xl md:p-5">
+        <main className="min-h-0 flex-1 overflow-auto rounded-[30px] border border-white/70 bg-white/80 p-4 shadow-[0_24px_56px_rgba(15,23,42,0.08)] backdrop-blur-xl md:p-5">
           {children}
         </main>
       </div>

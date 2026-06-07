@@ -14,6 +14,7 @@ import { testingRouter } from "./routes/testing.js";
 import { dnsServer } from "./services/dns-server.js";
 import { recordEvent } from "./services/events.js";
 import { syncInfrastructure } from "./services/infrastructure-sync.js";
+import { markIncompleteJobsAsInterrupted } from "./services/jobs.js";
 
 const app = new Hono();
 
@@ -49,6 +50,16 @@ if (currentEventCount === 0) {
     level: "info",
     title: "Lab-Core v3 を初期化しました",
     message: "バックエンドが初回起動しました。"
+  });
+}
+
+const interruptedJobs = markIncompleteJobsAsInterrupted();
+if (interruptedJobs.length > 0) {
+  recordEvent({
+    scope: "system",
+    level: "warning",
+    title: "未完了ジョブを整理しました",
+    message: `起動時に ${interruptedJobs.length} 件の未完了ジョブを中断扱いへ更新しました。`
   });
 }
 

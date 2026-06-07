@@ -37,7 +37,7 @@ body {
   background: var(--bg-grad-a), var(--bg-grad-b), var(--bg);
   color: var(--text-main);
   font-family: "Space Grotesk", "Noto Sans JP", sans-serif;
-  overflow: hidden;
+  overflow: auto;
 }
 
 a {

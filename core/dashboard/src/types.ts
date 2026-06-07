@@ -297,6 +297,7 @@ export type ApplicationJob = {
   request_payload?: Record<string, unknown>;
   retryable?: boolean;
   cancellable?: boolean;
+  dismissible?: boolean;
 };
 
 export type ApplicationDetail = {

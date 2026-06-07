@@ -107,3 +107,78 @@ export function cancelQueuedJob(jobId: string): boolean {
 
   return result.changes > 0;
 }
+
+export type InterruptedJobInfo = {
+  job_id: string;
+  type: JobType;
+  related_application_id: string | null;
+  status: Extract<JobStatus, "queued" | "running">;
+};
+
+export function markIncompleteJobsAsInterrupted(): InterruptedJobInfo[] {
+  const jobs = db
+    .prepare(
+      `
+        SELECT job_id, type, related_application_id, status
+        FROM jobs
+        WHERE status IN ('queued', 'running')
+        ORDER BY created_at ASC
+      `
+    )
+    .all() as InterruptedJobInfo[];
+
+  if (jobs.length === 0) {
+    return [];
+  }
+
+  const cancelQueuedStatement = db.prepare(
+    `
+      UPDATE jobs
+      SET status = 'cancelled',
+          finished_at = ?,
+          message = ?
+      WHERE job_id = ?
+        AND status = 'queued'
+    `
+  );
+
+  const failRunningStatement = db.prepare(
+    `
+      UPDATE jobs
+      SET status = 'failed',
+          finished_at = ?,
+          message = ?
+      WHERE job_id = ?
+        AND status = 'running'
+    `
+  );
+
+  const interruptedAt = nowIso();
+  const tx = db.transaction((rows: InterruptedJobInfo[]) => {
+    for (const job of rows) {
+      if (job.status === "queued") {
+        cancelQueuedStatement.run(interruptedAt, "バックエンド再起動により待機中ジョブを取り消しました。", job.job_id);
+        continue;
+      }
+
+      failRunningStatement.run(interruptedAt, "バックエンド再起動により実行中ジョブを中断扱いにしました。", job.job_id);
+    }
+  });
+
+  tx(jobs);
+  return jobs;
+}
+
+export function deleteFinishedJob(jobId: string): boolean {
+  const result = db
+    .prepare(
+      `
+        DELETE FROM jobs
+        WHERE job_id = ?
+          AND status IN ('succeeded', 'failed', 'cancelled')
+      `
+    )
+    .run(jobId);
+
+  return result.changes > 0;
+}
