@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import { db, nowIso } from "../lib/db.js";
 import type { EventLevel } from "../types.js";
+import { prepareInsertEventStatement } from "./event-store.js";
 
 type RecordEventInput = {
   scope: string;
@@ -10,17 +11,7 @@ type RecordEventInput = {
   message: string;
 };
 
-const insertEventStatement = db.prepare(`
-  INSERT INTO system_events (
-    event_id,
-    scope,
-    application_id,
-    level,
-    title,
-    message,
-    created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?)
-`);
+const insertEventStatement = prepareInsertEventStatement(db);
 
 export function recordEvent(input: RecordEventInput): string {
   const eventId = nanoid();
