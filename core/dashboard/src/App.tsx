@@ -25,6 +25,7 @@ import {
   updateApplicationDeployment
 } from "./api";
 import { DashboardShell, type DashboardView } from "./components/DashboardShell";
+import { JobsPanel } from "./components/JobsPanel";
 import type {
   ApplicationComposeInspection,
   ApplicationDetail,
@@ -286,6 +287,7 @@ export function App() {
   const [logs, setLogs] = useState<DetailLogState>(initialLogState);
   const [deleteMode, setDeleteMode] = useState<DeleteMode>("config_only");
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [jobsPanelOpen, setJobsPanelOpen] = useState(false);
 
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -297,6 +299,11 @@ export function App() {
     () => applications.find((application) => application.application_id === selectedApplicationId) ?? null,
     [applications, selectedApplicationId]
   );
+  const activeJobsCount = useMemo(
+    () => jobs.filter((job) => job.status === "queued" || job.status === "running").length,
+    [jobs]
+  );
+  const failedJobsCount = useMemo(() => jobs.filter((job) => job.status === "failed").length, [jobs]);
 
   async function reload(options: { mode?: "manual" | "background" | "action" } = {}): Promise<void> {
     const mode = options.mode ?? "manual";
@@ -515,6 +522,7 @@ export function App() {
   }
 
   function openDetail(applicationId: string): void {
+    setJobsPanelOpen(false);
     setSelectedApplicationId(applicationId);
     setActiveView("detail");
     setDetail(null);
@@ -950,10 +958,23 @@ export function App() {
       detailEnabled={selectedApplication !== null}
       executionMode={system?.execution?.mode ?? null}
       loading={busy}
+      activeJobsCount={activeJobsCount}
+      failedJobsCount={failedJobsCount}
       onNavigate={setActiveView}
       onReload={() => void reload()}
       onSyncInfrastructure={() =>
         void runAction(async () => syncInfrastructure("dashboard-manual-sync"), "DNS/Proxy 設定を同期しました。")
+      }
+      onToggleJobsPanel={() => setJobsPanelOpen((prev) => !prev)}
+      jobsPanel={
+        <JobsPanel
+          open={jobsPanelOpen}
+          jobs={jobs}
+          onClose={() => setJobsPanelOpen(false)}
+          onOpenDetail={openDetail}
+          onRetryJob={(jobId, typeLabel) => void onRetryJob(jobId, typeLabel)}
+          onCancelJob={(jobId) => void onCancelJob(jobId)}
+        />
       }
     >
       {(actionMessage || errorMessage) ? (
@@ -971,8 +992,6 @@ export function App() {
           events={events}
           onOpenApplications={() => setActiveView("apps")}
           onOpenDetail={(applicationId) => openDetail(applicationId)}
-          onRetryJob={(jobId, typeLabel) => void onRetryJob(jobId, typeLabel)}
-          onCancelJob={(jobId) => void onCancelJob(jobId)}
         />
       ) : null}
 

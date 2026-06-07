@@ -1,15 +1,11 @@
+import { FiActivity, FiAlertTriangle, FiArrowRight, FiCheckCircle, FiClock, FiExternalLink, FiXCircle } from "react-icons/fi";
 import type { ApplicationJob, ApplicationListItem, SystemEvent, SystemStatus } from "../types";
 import {
-  applicationStatusMeta,
   buildAttentionSummary,
-  formatElapsed,
   formatRelative,
-  healthBadgeClass,
   healthMeta,
-  jobStatusBadgeClass,
-  jobStatusLabel,
   jobTypeLabel,
-  statusBadgeClass,
+  shortCommit,
   toLocale
 } from "../ui";
 
@@ -20,279 +16,213 @@ type HomeViewProps = {
   events: SystemEvent[];
   onOpenApplications: () => void;
   onOpenDetail: (applicationId: string) => void;
-  onRetryJob: (jobId: string, typeLabel: string) => void;
-  onCancelJob: (jobId: string) => void;
 };
 
-export function HomeView(props: HomeViewProps) {
-  const { system, applications, jobs, events, onOpenApplications, onOpenDetail, onRetryJob, onCancelJob } = props;
+function metricTone(kind: "ok" | "warn" | "error" | "neutral"): string {
+  if (kind === "ok") {
+    return "from-emerald-50 to-white text-emerald-900 ring-emerald-200";
+  }
+  if (kind === "warn") {
+    return "from-amber-50 to-white text-amber-900 ring-amber-200";
+  }
+  if (kind === "error") {
+    return "from-rose-50 to-white text-rose-900 ring-rose-200";
+  }
+  return "from-slate-50 to-white text-slate-900 ring-slate-200";
+}
 
+export function HomeView(props: HomeViewProps) {
+  const { system, applications, jobs, events, onOpenApplications, onOpenDetail } = props;
+
+  const healthyCount = applications.filter((application) => application.health?.severity === "ok").length;
+  const warningCount = applications.filter((application) => application.health?.severity === "warning").length;
+  const criticalCount = applications.filter((application) => application.health?.severity === "critical").length;
   const attentionApps = applications
     .filter((application) => {
       const severity = application.health?.severity;
       return severity === "critical" || severity === "warning" || application.status === "Failed";
     })
     .slice(0, 6);
-  const runningJobs = jobs.filter((job) => job.status === "queued" || job.status === "running").slice(0, 8);
-  const failedJobs = jobs.filter((job) => job.status === "failed").slice(0, 8);
-  const recentEvents = [...events].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 8);
-  const slowApps = applications
-    .filter((application) => application.health?.state === "slow")
-    .sort((a, b) => (b.health?.response_time_ms ?? 0) - (a.health?.response_time_ms ?? 0))
-    .slice(0, 5);
+  const failedJobs = jobs.filter((job) => job.status === "failed").slice(0, 5);
+  const recentEvents = [...events].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 7);
   const recentApps = [...applications].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 5);
 
-  const healthyCount = applications.filter((application) => application.health?.severity === "ok").length;
-  const warningCount = applications.filter((application) => application.health?.severity === "warning").length;
-  const criticalCount = applications.filter((application) => application.health?.severity === "critical").length;
-
   return (
-    <div className="view-grid dashboard-home">
-      <section className="hero-grid">
-        <article className="hero-card panel-card">
-          <div className="hero-copy">
-            <p className="section-kicker">OVERVIEW</p>
-            <h2>今どこに注意すべきかを、最初の一画面で把握できます。</h2>
-            <p className="panel-sub">
-              登録済みアプリ、実行中ジョブ、直近イベントをまとめて確認しながら、詰まりや失敗をすぐ追える構成に更新しました。
-            </p>
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pr-1">
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <article className={`rounded-3xl bg-gradient-to-br p-5 ring-1 ${metricTone("neutral")}`}>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-slate-600">登録アプリ</span>
+            <FiActivity className="h-5 w-5 text-slate-400" />
           </div>
-          <div className="hero-actions">
-            <button type="button" className="button primary" onClick={onOpenApplications}>
-              アプリ一覧を開く
-            </button>
-            {system?.execution ? (
-              <p className="hero-meta">
-                監視対象ドメイン: <strong>{system.execution.rootDomain}</strong>
-              </p>
-            ) : null}
-          </div>
+          <p className="mt-5 text-3xl font-semibold tracking-tight">{applications.length}</p>
+          <p className="mt-2 text-sm text-slate-500">{system?.applicationSummary.running ?? 0} 件が稼働中</p>
         </article>
 
-        <div className="summary-grid">
-          <article className="metric-card">
-            <p>登録アプリ</p>
-            <strong>{applications.length}</strong>
-            <span>{system?.applicationSummary.running ?? 0} 件が稼働中</span>
-          </article>
-          <article className="metric-card ok">
-            <p>正常</p>
-            <strong>{healthyCount}</strong>
-            <span>URL とコンテナが安定</span>
-          </article>
-          <article className="metric-card warn">
-            <p>要確認</p>
-            <strong>{warningCount}</strong>
-            <span>遅延や画面確認が必要</span>
-          </article>
-          <article className="metric-card error">
-            <p>異常</p>
-            <strong>{criticalCount}</strong>
-            <span>到達不可または実行エラー</span>
-          </article>
-          <article className="metric-card info">
-            <p>進行中ジョブ</p>
-            <strong>{runningJobs.length}</strong>
-            <span>待機中を含む</span>
-          </article>
-          <article className="metric-card">
-            <p>失敗ジョブ</p>
-            <strong>{failedJobs.length}</strong>
-            <span>再実行の候補</span>
-          </article>
-        </div>
+        <article className={`rounded-3xl bg-gradient-to-br p-5 ring-1 ${metricTone("ok")}`}>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-emerald-700">正常</span>
+            <FiCheckCircle className="h-5 w-5 text-emerald-500" />
+          </div>
+          <p className="mt-5 text-3xl font-semibold tracking-tight">{healthyCount}</p>
+          <p className="mt-2 text-sm text-emerald-700/70">応答とコンテナが安定</p>
+        </article>
+
+        <article className={`rounded-3xl bg-gradient-to-br p-5 ring-1 ${metricTone("warn")}`}>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-amber-700">要確認</span>
+            <FiAlertTriangle className="h-5 w-5 text-amber-500" />
+          </div>
+          <p className="mt-5 text-3xl font-semibold tracking-tight">{warningCount}</p>
+          <p className="mt-2 text-sm text-amber-700/70">遅延・画面確認が必要</p>
+        </article>
+
+        <article className={`rounded-3xl bg-gradient-to-br p-5 ring-1 ${metricTone("error")}`}>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-rose-700">異常</span>
+            <FiXCircle className="h-5 w-5 text-rose-500" />
+          </div>
+          <p className="mt-5 text-3xl font-semibold tracking-tight">{criticalCount}</p>
+          <p className="mt-2 text-sm text-rose-700/70">到達不可・実行エラー</p>
+        </article>
       </section>
 
-      <section className="split-grid home-primary-grid">
-        <article className="panel-card scroll-panel">
-          <div className="panel-head">
+      <section className="grid min-h-0 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="section-kicker">APPS</p>
-              <h2>注意が必要なアプリ</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Attention</p>
+              <h2 className="mt-2 text-lg font-semibold text-slate-950">注意アプリ</h2>
             </div>
-            <button type="button" className="button ghost" onClick={onOpenApplications}>
-              全一覧
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              onClick={onOpenApplications}
+            >
+              一覧へ
+              <FiArrowRight className="h-4 w-4" />
             </button>
           </div>
-          <div className="panel-scroll card-list">
-            {attentionApps.length === 0 ? <p className="empty-message">現在、優先対応が必要なアプリはありません。</p> : null}
+
+          <div className="mt-4 grid gap-3">
+            {attentionApps.length === 0 ? <p className="text-sm text-slate-500">優先対応が必要なアプリはありません。</p> : null}
             {attentionApps.map((application) => {
               const health = healthMeta(application.health);
-              const status = applicationStatusMeta(application.status);
-
               return (
-                <article key={application.application_id} className="app-spotlight-card">
-                  <div className="app-spotlight-head">
-                    <div>
-                      <strong>{application.name}</strong>
-                      <p>{application.hostname}</p>
+                <button
+                  key={application.application_id}
+                  type="button"
+                  className="group rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white"
+                  onClick={() => onOpenDetail(application.application_id)}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-base font-semibold text-slate-950">{application.name}</span>
+                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                          {health.label}
+                        </span>
+                      </div>
+                      <p className="mt-1 truncate text-sm text-slate-500">{application.hostname}</p>
                     </div>
-                    <div className="badge-row">
-                      <span className={healthBadgeClass(application.health)}>{health.label}</span>
-                      <span className={statusBadgeClass(application.status)}>{status.label}</span>
-                    </div>
+                    <FiExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition group-hover:text-slate-700" />
                   </div>
-                  <p className="spotlight-copy">{buildAttentionSummary(application)}</p>
-                  <div className="spotlight-meta">
-                    <span>最終更新 {formatRelative(application.updated_at)}</span>
+                  <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-700">{buildAttentionSummary(application)}</p>
+                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                    <span>{formatRelative(application.updated_at)}</span>
                     {application.health?.response_time_ms ? <span>{application.health.response_time_ms}ms</span> : null}
+                    <span>{shortCommit(application.current_commit)}</span>
                   </div>
-                  <div className="spotlight-actions">
-                    <button type="button" className="button tiny primary" onClick={() => onOpenDetail(application.application_id)}>
-                      詳細を見る
-                    </button>
-                    <a className="button tiny ghost" href={`http://${application.hostname}`} target="_blank" rel="noreferrer">
-                      公開 URL
-                    </a>
-                  </div>
-                </article>
+                </button>
               );
             })}
           </div>
         </article>
 
-        <article className="panel-card scroll-panel">
-          <div className="panel-head">
-            <div>
-              <p className="section-kicker">QUEUE</p>
-              <h2>実行中・待機中のジョブ</h2>
+        <div className="grid gap-4">
+          <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Failures</p>
+                <h2 className="mt-2 text-lg font-semibold text-slate-950">失敗ジョブ</h2>
+              </div>
+              <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700">{failedJobs.length}</span>
             </div>
-          </div>
-          <div className="panel-scroll card-list">
-            {runningJobs.length === 0 ? <p className="empty-message">進行中のジョブはありません。</p> : null}
-            {runningJobs.map((job) => (
-              <article key={job.job_id} className="job-card">
-                <div className="job-card-head">
-                  <div>
-                    <strong>{job.application_name ?? "システム"}</strong>
-                    <p>{jobTypeLabel(job.type)}</p>
+            <div className="mt-4 space-y-3">
+              {failedJobs.length === 0 ? <p className="text-sm text-slate-500">失敗ジョブはありません。</p> : null}
+              {failedJobs.map((job) => (
+                <div key={job.job_id} className="rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-3">
+                  <p className="text-sm font-semibold text-slate-900">{job.application_name ?? "システム"}</p>
+                  <p className="mt-1 text-sm text-slate-600">{jobTypeLabel(job.type)}</p>
+                  {job.message ? <p className="mt-2 line-clamp-2 text-sm text-rose-800">{job.message}</p> : null}
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">New</p>
+                <h2 className="mt-2 text-lg font-semibold text-slate-950">最近追加</h2>
+              </div>
+              <FiClock className="h-4 w-4 text-slate-400" />
+            </div>
+            <div className="mt-4 space-y-3">
+              {recentApps.map((application) => (
+                <button
+                  key={application.application_id}
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 text-left transition hover:border-slate-300 hover:bg-slate-50"
+                  onClick={() => onOpenDetail(application.application_id)}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">{application.name}</p>
+                    <p className="mt-1 text-xs text-slate-500">{formatRelative(application.created_at)}</p>
                   </div>
-                  <span className={jobStatusBadgeClass(job.status)}>{jobStatusLabel(job.status)}</span>
-                </div>
-                {job.message ? <p className="job-card-copy">{job.message}</p> : null}
-                <div className="job-card-meta">
-                  <span>作成 {formatRelative(job.created_at)}</span>
-                  <span>経過 {formatElapsed(job.started_at ?? job.created_at)}</span>
-                </div>
-                <div className="job-card-actions">
-                  {job.related_application_id ? (
-                    <button
-                      type="button"
-                      className="button tiny ghost"
-                      onClick={() => onOpenDetail(job.related_application_id as string)}
-                    >
-                      対象アプリ
-                    </button>
-                  ) : null}
-                  {job.cancellable ? (
-                    <button type="button" className="button tiny warn" onClick={() => onCancelJob(job.job_id)}>
-                      待機を取り消す
-                    </button>
-                  ) : null}
-                </div>
-              </article>
-            ))}
-          </div>
-        </article>
+                  <FiArrowRight className="h-4 w-4 shrink-0 text-slate-400" />
+                </button>
+              ))}
+            </div>
+          </article>
+        </div>
       </section>
 
-      <section className="split-grid home-secondary-grid">
-        <article className="panel-card scroll-panel">
-          <div className="panel-head">
-            <div>
-              <p className="section-kicker">EVENTS</p>
-              <h2>直近イベント</h2>
-            </div>
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Events</p>
+            <h2 className="mt-2 text-lg font-semibold text-slate-950">直近イベント</h2>
           </div>
-          <div className="panel-scroll">
-            {recentEvents.length === 0 ? <p className="empty-message">イベントはまだありません。</p> : null}
-            <ul className="event-list">
-              {recentEvents.map((event) => (
-                <li key={event.event_id} className={`event-item ${event.level}`}>
-                  <div>
-                    <strong>{event.title}</strong>
-                    {event.application_name ? <p className="event-app">対象: {event.application_name}</p> : null}
-                    <p>{event.message}</p>
-                  </div>
-                  <time>{toLocale(event.created_at)}</time>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </article>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{recentEvents.length}</span>
+        </div>
 
-        <article className="panel-card scroll-panel">
-          <div className="panel-head">
-            <div>
-              <p className="section-kicker">CHANGES</p>
-              <h2>最近の追加と失敗ジョブ</h2>
-            </div>
-          </div>
-          <div className="panel-scroll stacked-blocks">
-            <section className="mini-section">
-              <h3>最近追加されたアプリ</h3>
-              <ul className="simple-list">
-                {recentApps.map((application) => (
-                  <li key={application.application_id} className="list-row compact">
-                    <div>
-                      <strong>{application.name}</strong>
-                      <p>{formatRelative(application.created_at)}</p>
-                    </div>
-                    <button type="button" className="button tiny ghost" onClick={() => onOpenDetail(application.application_id)}>
-                      詳細
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-
-            <section className="mini-section">
-              <h3>応答が遅いアプリ</h3>
-              {slowApps.length === 0 ? <p className="empty-message">現在はありません。</p> : null}
-              <ul className="simple-list">
-                {slowApps.map((application) => (
-                  <li key={application.application_id} className="list-row compact">
-                    <div>
-                      <strong>{application.name}</strong>
-                      <p>{application.health?.response_time_ms ?? "-"}ms / {application.health?.summary ?? "監視中"}</p>
-                    </div>
-                    <button type="button" className="button tiny ghost" onClick={() => onOpenDetail(application.application_id)}>
-                      詳細
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-
-            <section className="mini-section">
-              <h3>失敗ジョブ</h3>
-              {failedJobs.length === 0 ? <p className="empty-message">再実行待ちの失敗ジョブはありません。</p> : null}
-              <ul className="simple-list">
-                {failedJobs.map((job) => (
-                  <li key={job.job_id} className="job-list-row">
-                    <div>
-                      <strong>{job.application_name ?? "システム"}</strong>
-                      <p>{jobTypeLabel(job.type)} / {job.message ?? "失敗しました"}</p>
-                      <p>{toLocale(job.finished_at ?? job.created_at)}</p>
-                    </div>
-                    <div className="list-actions">
-                      <span className={jobStatusBadgeClass(job.status)}>{jobStatusLabel(job.status)}</span>
-                      {job.retryable ? (
-                        <button
-                          type="button"
-                          className="button tiny primary"
-                          onClick={() => onRetryJob(job.job_id, jobTypeLabel(job.type))}
-                        >
-                          再実行
-                        </button>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          </div>
-        </article>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {recentEvents.length === 0 ? <p className="text-sm text-slate-500">イベントはまだありません。</p> : null}
+          {recentEvents.map((event) => (
+            <article key={event.event_id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-900">{event.title}</p>
+                  {event.application_name ? <p className="mt-1 text-xs text-slate-500">{event.application_name}</p> : null}
+                </div>
+                <span
+                  className={`rounded-full px-2 py-1 text-[11px] font-medium ${
+                    event.level === "error"
+                      ? "bg-rose-100 text-rose-700"
+                      : event.level === "warning"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-emerald-100 text-emerald-700"
+                  }`}
+                >
+                  {event.level}
+                </span>
+              </div>
+              <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-700">{event.message}</p>
+              <p className="mt-3 text-xs text-slate-500">{toLocale(event.created_at)}</p>
+            </article>
+          ))}
+        </div>
       </section>
     </div>
   );
