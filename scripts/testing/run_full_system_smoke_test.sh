@@ -9,7 +9,7 @@ cd "${ROOT_DIR}"
 rm -f core/backend/data/database.sqlite
 mkdir -p core/backend/data/generated
 
-yarn dev:backend > "${BACKEND_LOG}" 2>&1 &
+corepack yarn service:backend:up > "${BACKEND_LOG}" 2>&1 &
 PID=$!
 
 cleanup() {

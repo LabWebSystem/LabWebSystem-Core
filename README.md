@@ -49,7 +49,6 @@
   - `yarn destroy`
 
 ## 注意事項
-- `quality:test:smoke` は現状 `scripts/testing/run_full_system_smoke_test.sh` 内に旧コマンド参照が残っており、環境によっては修正が必要です。
 - `.env` 再作成時はバックアップが自動作成されます。
 
 ## ドキュメント

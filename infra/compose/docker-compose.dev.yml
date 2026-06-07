@@ -10,7 +10,7 @@ services:
   backend:
     image: node:20-alpine
     working_dir: ${LAB_CORE_HOST_PROJECT_ROOT:-/workspace}
-    command: sh -lc "apk add --no-cache git docker-cli docker-cli-compose && corepack yarn dev:backend"
+    command: sh -lc "apk add --no-cache git docker-cli docker-cli-compose && corepack yarn service:backend:up"
     volumes:
       - ${LAB_CORE_HOST_PROJECT_ROOT:-../../}:${LAB_CORE_HOST_PROJECT_ROOT:-/workspace}
       - labcore_node_modules:${LAB_CORE_HOST_PROJECT_ROOT:-/workspace}/node_modules
