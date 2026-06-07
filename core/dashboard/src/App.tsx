@@ -31,6 +31,7 @@ import type {
   CreateApplicationPayload,
   DeleteMode,
   ImportResolveResponse,
+  ImportResolvedManifest,
   SystemEvent,
   SystemStatus,
   UpdateDeploymentPayload
@@ -50,9 +51,9 @@ const initialImportForm: ImportFormState = {
   description: "",
   sourceUrl: "",
   defaultBranch: "main",
-  composePath: "docker-compose.yml",
-  publicServiceName: "web",
-  publicPort: "3000",
+  composePath: "",
+  publicServiceName: "",
+  publicPort: "",
   hostname: "",
   mode: "standard",
   keepVolumesOnRebuild: true
@@ -67,6 +68,8 @@ const initialResolveState: ImportResolveState = {
   yamlFiles: [],
   composeCandidates: [],
   recommendedComposePath: null,
+  manifestPath: "",
+  manifest: null,
   warning: ""
 };
 
@@ -151,6 +154,16 @@ function mergeEnvironmentOverrides(
   return next;
 }
 
+function buildManifestEnvironmentOverrides(manifest: ImportResolvedManifest): Record<string, string> {
+  const next: Record<string, string> = { ...manifest.env.defaults };
+  for (const name of manifest.env.required) {
+    if (!(name in next)) {
+      next[name] = "";
+    }
+  }
+  return next;
+}
+
 function buildCreatePayload(
   form: ImportFormState,
   deviceRequirementsRaw: string,
@@ -161,7 +174,7 @@ function buildCreatePayload(
     description: form.description,
     repositoryUrl: form.sourceUrl.trim(),
     defaultBranch: form.defaultBranch.trim().length > 0 ? form.defaultBranch.trim() : "main",
-    composePath: form.composePath.trim().length > 0 ? form.composePath.trim() : "docker-compose.yml",
+    composePath: form.composePath.trim(),
     publicServiceName: form.publicServiceName,
     publicPort: Number(form.publicPort),
     hostname: form.hostname,
@@ -513,6 +526,7 @@ export function App() {
     if (key === "sourceUrl") {
       setResolveState(initialResolveState);
       setComposeState(initialComposeState);
+      setDeviceRequirementsRaw("");
       setEnvironmentOverrides({});
       return;
     }
@@ -532,13 +546,24 @@ export function App() {
       yamlFiles: result.yamlFiles,
       composeCandidates: result.composeCandidates,
       recommendedComposePath: result.recommendedComposePath,
+      manifestPath: result.manifestPath,
+      manifest: result.manifest,
       warning: result.warning ?? ""
     });
     setForm((prev) => ({
       ...prev,
       defaultBranch: result.resolvedBranch,
-      composePath: result.recommendedComposePath ?? prev.composePath
+      name: result.manifest.app.name,
+      description: result.manifest.app.description,
+      composePath: result.manifest.deployment.composePath,
+      publicServiceName: result.manifest.exposure.service,
+      publicPort: String(result.manifest.exposure.port),
+      hostname: result.manifest.exposure.hostname,
+      mode: result.manifest.deployment.mode,
+      keepVolumesOnRebuild: result.manifest.deployment.keepVolumesOnRebuild
     }));
+    setDeviceRequirementsRaw(result.manifest.devices.required.join(", "));
+    setEnvironmentOverrides(buildManifestEnvironmentOverrides(result.manifest));
   }
 
   async function inspectCompose(
@@ -568,7 +593,9 @@ export function App() {
         warning: buildComposeInspectionWarning(inspection)
       });
       setForm((prev) => ({ ...prev, composePath: inspection.selectedComposePath }));
-      setDeviceRequirementsRaw(inspection.detectedDeviceRequirements.join(", "));
+      setDeviceRequirementsRaw((prev) =>
+        prev.trim().length > 0 ? prev : inspection.detectedDeviceRequirements.join(", ")
+      );
       setEnvironmentOverrides((prev) => mergeEnvironmentOverrides(prev, inspection.environmentRequirements));
 
       if (options.autoSelect !== false) {
@@ -619,13 +646,12 @@ export function App() {
       setResolveState({
         ...initialResolveState,
         status: "error",
-        warning: `${message} 手入力で続行できます。`
+        warning: message
       });
       setComposeState(initialComposeState);
-      setForm((prev) => ({
-        ...prev,
-        defaultBranch: prev.defaultBranch.trim().length > 0 ? prev.defaultBranch : "main"
-      }));
+      setDeviceRequirementsRaw("");
+      setEnvironmentOverrides({});
+      setErrorMessage(message);
     }
   }
 
@@ -635,6 +661,18 @@ export function App() {
 
     if (payload.repositoryUrl.length === 0) {
       setErrorMessage("GitHub URL を入力してください。");
+      return;
+    }
+    if (resolveState.status !== "resolved" || !resolveState.manifest) {
+      setErrorMessage("labcore.app.yaml の解析が完了しているアプリのみ登録できます。");
+      return;
+    }
+    if (composeState.status !== "ready" || composeState.inspection === null) {
+      setErrorMessage("manifest が指定する compose の解析を完了してください。");
+      return;
+    }
+    if (payload.composePath.length === 0) {
+      setErrorMessage("labcore.app.yaml の composePath を取得できていません。");
       return;
     }
 

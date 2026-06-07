@@ -35,6 +35,11 @@ import type {
   ComposeServiceCandidate,
   RepositoryMetadata
 } from "../services/compose-inspection.js";
+import {
+  findLabcoreManifestPath,
+  parseLabcoreManifest,
+  type LabcoreManifest
+} from "../services/import-manifest.js";
 import { recordEvent } from "../services/events.js";
 import { syncInfrastructure } from "../services/infrastructure-sync.js";
 import { createJob, finishJob, startJob } from "../services/jobs.js";
@@ -206,6 +211,11 @@ type GithubTreeResponse = {
 type GithubBlobResponse = {
   content: string;
   encoding: string;
+};
+
+type ResolvedImportManifest = {
+  manifestPath: string;
+  manifest: LabcoreManifest;
 };
 
 function decodeSegment(segment: string): string {
@@ -442,6 +452,36 @@ async function collectRepositoryMetadataFromRemote(repositoryUrl: string, branch
     return withTemporaryGitClone(repositoryUrl, branch, async (repoPath) =>
       collectRepositoryMetadataFromPaths(listLocalRepositoryFiles(repoPath))
     );
+  }
+}
+
+async function resolveImportManifestFromRemote(repositoryUrl: string, branch: string): Promise<ResolvedImportManifest> {
+  try {
+    const entries = await fetchRepositoryTree(repositoryUrl, branch);
+    const manifestPath = findLabcoreManifestPath(entries.map((entry) => entry.path));
+    const matchedEntry = entries.find((entry) => entry.path === manifestPath);
+
+    if (!matchedEntry) {
+      throw new Error(`labcore.app.yaml の取得に失敗しました: ${manifestPath}`);
+    }
+
+    const rawManifest = await fetchBlobContent(matchedEntry.url);
+    return {
+      manifestPath,
+      manifest: parseLabcoreManifest(rawManifest, manifestPath)
+    };
+  } catch {
+    return withTemporaryGitClone(repositoryUrl, branch, async (repoPath) => {
+      const repositoryFiles = listLocalRepositoryFiles(repoPath);
+      const manifestPath = findLabcoreManifestPath(repositoryFiles);
+      const absoluteManifestPath = path.resolve(repoPath, manifestPath);
+      const rawManifest = fs.readFileSync(absoluteManifestPath, "utf8");
+
+      return {
+        manifestPath,
+        manifest: parseLabcoreManifest(rawManifest, manifestPath)
+      };
+    });
   }
 }
 
@@ -850,16 +890,22 @@ applicationsRouter.post("/import/resolve", async (c) => {
   let yamlFiles: string[] = [];
   let composeCandidates: string[] = [];
   let recommendedComposePath: string | null = null;
+  let manifestPath = "";
+  let manifest: LabcoreManifest | null = null;
 
   try {
     const metadata = await collectRepositoryMetadataFromRemote(parsedSource.canonicalRepositoryUrl, resolvedBranch);
+    const resolvedManifest = await resolveImportManifestFromRemote(parsedSource.canonicalRepositoryUrl, resolvedBranch);
+    const manifestComposePath = resolvedManifest.manifest.deployment.composePath.trim().replace(/^\/+/, "");
     repositoryFiles = metadata.repositoryFiles;
-    yamlFiles = metadata.yamlFiles;
-    composeCandidates = metadata.composeCandidates;
-    recommendedComposePath = metadata.recommendedComposePath;
+    yamlFiles = [resolvedManifest.manifestPath];
+    composeCandidates = [manifestComposePath];
+    recommendedComposePath = manifestComposePath;
+    manifestPath = resolvedManifest.manifestPath;
+    manifest = resolvedManifest.manifest;
   } catch (error) {
-    const detail = error instanceof Error ? error.message : "不明なエラー";
-    warnings.push(`リポジトリ内ファイル一覧の取得に失敗しました。(${detail})`);
+    const message = error instanceof Error ? error.message : "不明なエラー";
+    return c.json({ message }, 400);
   }
 
   return c.json({
@@ -871,6 +917,8 @@ applicationsRouter.post("/import/resolve", async (c) => {
     yamlFiles,
     composeCandidates,
     recommendedComposePath,
+    manifestPath,
+    manifest,
     warning: warnings.length > 0 ? warnings.join(" ") : undefined
   });
 });
@@ -1300,6 +1348,21 @@ applicationsRouter.post("/", async (c) => {
   }
 
   try {
+    const resolvedManifest = await resolveImportManifestFromRemote(
+      normalizedImportInput.repositoryUrl,
+      normalizedImportInput.defaultBranch
+    );
+    const manifestComposePath = resolvedManifest.manifest.deployment.composePath.trim().replace(/^\/+/, "");
+
+    if (data.composePath.trim().replace(/^\/+/, "") !== manifestComposePath) {
+      return c.json(
+        {
+          message: `labcore.app.yaml の deployment.composePath (${manifestComposePath}) を使用してください。`
+        },
+        400
+      );
+    }
+
     const inspection = await inspectComposeFromRepository(
       normalizedImportInput.repositoryUrl,
       normalizedImportInput.defaultBranch,

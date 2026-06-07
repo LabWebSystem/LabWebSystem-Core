@@ -88,6 +88,38 @@ export type CreateApplicationPayload = {
   envOverrides: Record<string, string>;
 };
 
+export type ImportResolvedManifest = {
+  schemaVersion: number;
+  app: {
+    name: string;
+    description: string;
+  };
+  repository: {
+    url: string;
+    defaultBranch: string;
+  };
+  deployment: {
+    composePath: string;
+    mode: "standard" | "headless";
+    keepVolumesOnRebuild: boolean;
+  };
+  exposure: {
+    service: string;
+    port: number;
+    hostname: string;
+  };
+  devices: {
+    required: string[];
+  };
+  env: {
+    required: string[];
+    defaults: Record<string, string>;
+  };
+  profiles: {
+    default: string;
+  };
+};
+
 export type CreateApplicationResponse = {
   applicationId: string;
   deploymentId: string;
@@ -105,6 +137,8 @@ export type ImportResolveResponse = {
   yamlFiles: string[];
   composeCandidates: string[];
   recommendedComposePath: string | null;
+  manifestPath: string;
+  manifest: ImportResolvedManifest;
   warning?: string;
 };
 

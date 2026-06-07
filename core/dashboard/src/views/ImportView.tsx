@@ -1,6 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { ComposeInspectDialog } from "../components/ComposeInspectDialog";
-import type { ComposeServiceCandidate, ImportComposeInspectResponse } from "../types";
+import type {
+  ComposeServiceCandidate,
+  ImportComposeInspectResponse,
+  ImportResolvedManifest
+} from "../types";
 
 export type ImportFormState = {
   name: string;
@@ -24,6 +28,8 @@ export type ImportResolveState = {
   yamlFiles: string[];
   composeCandidates: string[];
   recommendedComposePath: string | null;
+  manifestPath: string;
+  manifest: ImportResolvedManifest | null;
   warning: string;
 };
 
@@ -74,7 +80,30 @@ export function ImportView(props: ImportViewProps) {
   const hasBranch = form.defaultBranch.trim().length > 0;
   const hasComposeSelection = form.composePath.trim().length > 0;
   const hasComposeInspection = composeState.status === "ready" && composeState.services.length > 0 && form.publicServiceName.trim().length > 0;
-  const otherYamlFiles = resolveState.yamlFiles.filter((yamlPath) => !resolveState.composeCandidates.includes(yamlPath));
+  const manifest = resolveState.manifest;
+  const composeEnvRequirements = composeState.inspection?.environmentRequirements ?? [];
+  const composeEnvNames = new Set(composeEnvRequirements.map((requirement) => requirement.name));
+  const manifestOnlyEnvRequirements = manifest
+    ? [
+        ...manifest.env.required
+          .filter((name) => !composeEnvNames.has(name))
+          .map((name) => ({
+            name,
+            required: true,
+            defaultValue: manifest.env.defaults[name] ?? null,
+            services: ["manifest"]
+          })),
+        ...Object.entries(manifest.env.defaults)
+          .filter(([name]) => !composeEnvNames.has(name) && !manifest.env.required.includes(name))
+          .map(([name, defaultValue]) => ({
+            name,
+            required: false,
+            defaultValue,
+            services: ["manifest"]
+          }))
+      ]
+    : [];
+  const displayedEnvRequirements = [...composeEnvRequirements, ...manifestOnlyEnvRequirements];
 
   return (
     <div className="view-grid">
@@ -156,46 +185,22 @@ export function ImportView(props: ImportViewProps) {
           {hasResolvedRepository && hasBranch ? (
             <section className="step-section">
               <p className="step-index">STEP 3</p>
-              <h3>composeファイル候補を選択</h3>
+              <h3>labcore.app.yaml を確認</h3>
               <div className="resolve-panel">
-                <p className="hint">自動検出: {resolveState.composeCandidates.length} 件</p>
-                {resolveState.composeCandidates.length > 0 ? (
-                  <div className="chip-list">
-                    {resolveState.composeCandidates.map((composePath) => (
-                      <button
-                        key={composePath}
-                        type="button"
-                        className={`chip-button ${form.composePath === composePath ? "active" : ""}`}
-                        onClick={() => {
-                          onFieldChange("composePath", composePath);
-                          void onInspectCompose(composePath);
-                        }}
-                      >
-                        {composePath}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="hint warning">compose 候補を自動検出できませんでした。下の YAML 一覧から選択してください。</p>
-                )}
-
-                {otherYamlFiles.length > 0 ? (
+                <p>
+                  manifest: <code>{resolveState.manifestPath}</code>
+                </p>
+                <p>
+                  composePath: <code>{form.composePath}</code>
+                </p>
+                {manifest ? (
                   <div className="yaml-block">
-                    <p className="hint">その他の YAML ファイル</p>
+                    <p className="hint">manifest から取得した初期値</p>
                     <div className="yaml-file-list">
-                      {otherYamlFiles.slice(0, 24).map((yamlPath) => (
-                        <button
-                          key={yamlPath}
-                          type="button"
-                          className={`file-link-button ${form.composePath === yamlPath ? "active" : ""}`}
-                          onClick={() => {
-                            onFieldChange("composePath", yamlPath);
-                            void onInspectCompose(yamlPath);
-                          }}
-                        >
-                          {yamlPath}
-                        </button>
-                      ))}
+                      <span className="file-link-button active">{manifest.app.name}</span>
+                      <span className="file-link-button active">{manifest.exposure.service}</span>
+                      <span className="file-link-button active">{manifest.exposure.port}</span>
+                      <span className="file-link-button active">{manifest.deployment.mode}</span>
                     </div>
                   </div>
                 ) : null}
@@ -204,15 +209,15 @@ export function ImportView(props: ImportViewProps) {
           ) : (
             <section className="step-section locked">
               <p className="step-index">STEP 3</p>
-              <h3>composeファイル候補を選択</h3>
-              <p className="step-lock">ブランチを確定すると compose ファイル候補が表示されます。</p>
+              <h3>labcore.app.yaml を確認</h3>
+              <p className="step-lock">ブランチを確定すると manifest の内容を表示します。</p>
             </section>
           )}
 
           {hasResolvedRepository && hasBranch && hasComposeSelection ? (
             <section className="step-section">
               <p className="step-index">STEP 4</p>
-              <h3>composeファイルを解析してサービスを選ぶ</h3>
+              <h3>manifest 指定の compose を解析してサービスを選ぶ</h3>
               <div className="resolve-panel">
                 <div className="compose-summary-row">
                   <p>
@@ -230,6 +235,14 @@ export function ImportView(props: ImportViewProps) {
                     </button>
                   ) : null}
                 </div>
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => void onInspectCompose(form.composePath)}
+                  disabled={composeState.status === "inspecting"}
+                >
+                  {composeState.status === "inspecting" ? "compose解析中..." : "manifest の compose を再解析"}
+                </button>
                 {composeState.warning ? <p className="hint warning">{composeState.warning}</p> : null}
                 {composeState.services.length > 0 ? (
                   <div className="service-grid">
@@ -260,8 +273,8 @@ export function ImportView(props: ImportViewProps) {
           ) : (
             <section className="step-section locked">
               <p className="step-index">STEP 4</p>
-              <h3>composeファイルを解析してサービスを選ぶ</h3>
-              <p className="step-lock">compose ファイルを選択するとサービス候補が表示されます。</p>
+              <h3>manifest 指定の compose を解析してサービスを選ぶ</h3>
+              <p className="step-lock">manifest の composePath が確定するとサービス候補を解析できます。</p>
             </section>
           )}
 
@@ -343,11 +356,11 @@ export function ImportView(props: ImportViewProps) {
                 </p>
               ) : null}
 
-              {composeState.inspection?.environmentRequirements.length ? (
+              {displayedEnvRequirements.length ? (
                 <div className="env-override-section">
-                  <p className="hint">compose から検出した環境変数</p>
+                  <p className="hint">compose / manifest から取得した環境変数</p>
                   <div className="env-override-grid">
-                    {composeState.inspection.environmentRequirements.map((requirement) => (
+                    {displayedEnvRequirements.map((requirement) => (
                       <label key={requirement.name} className="env-override-card">
                         <span>
                           {requirement.name}
