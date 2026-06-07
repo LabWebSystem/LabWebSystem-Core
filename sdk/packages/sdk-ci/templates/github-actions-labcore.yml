@@ -15,8 +15,8 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
-      - run: yarn sdk:labcore lint --profile dev-sim
-      - run: yarn sdk:labcore preflight --profile dev-sim
+      - run: yarn exec labcore lint --profile dev-sim
+      - run: yarn exec labcore preflight --profile dev-sim
 
   prod-guard:
     runs-on: ubuntu-latest
@@ -28,5 +28,5 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
-      - run: yarn sdk:labcore guard prod
-      - run: yarn sdk:labcore export --profile prod --out build/labcore-payload.json
+      - run: yarn exec labcore guard prod --profile prod
+      - run: yarn exec labcore export --profile prod --out build/labcore-payload.json

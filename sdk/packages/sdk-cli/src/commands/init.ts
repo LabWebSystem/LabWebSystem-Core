@@ -101,30 +101,32 @@ function sdkUsageGuideMd(appName: string, template: TemplateKind, config: Templa
 - \`labcore/seeds/apply.sh\` / \`verify.sh\` / \`reset.sh\`
 
 ## 2. 初回セットアップの流れ
-1. \`labcore.app.yaml\` の \`repository.url\`, \`exposure.hostname\`, 必須 env を実アプリ向けに直す
-2. \`docker-compose.yml\` と \`docker-compose.dev.yml\` / \`docker-compose.prod.yml\` のサービス名・ポートを実装に合わせる
-3. \`labcore/profiles/*.yaml\` の compose 差分と env 上書きを調整する
-4. 必要なら \`labcore/seeds/*.sh\` に初期化処理を書く
+1. 継続利用するなら \`@lab-core/sdk-cli\` を対象リポジトリへ追加する
+2. \`labcore.app.yaml\` の \`repository.url\`, \`exposure.hostname\`, 必須 env を実アプリ向けに直す
+3. \`docker-compose.yml\` と \`docker-compose.dev.yml\` / \`docker-compose.prod.yml\` のサービス名・ポートを実装に合わせる
+4. \`labcore/profiles/*.yaml\` の compose 差分と env 上書きを調整する
+5. 必要なら \`labcore/seeds/*.sh\` に初期化処理を書く
 
 ## 3. よく使うコマンド
-CLI を直接使える場合:
+継続利用する場合:
 
 \`\`\`bash
-labcore lint --profile dev-sim
-labcore preflight --profile dev-sim
-labcore inspect --profile dev-sim
-labcore guard prod --profile prod
-labcore export --profile prod --out build/labcore-payload.json
+yarn add -D @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main
+yarn exec labcore lint --profile dev-sim
+yarn exec labcore preflight --profile dev-sim
+yarn exec labcore inspect --profile dev-sim
+yarn exec labcore guard prod --profile prod
+yarn exec labcore export --profile prod --out build/labcore-payload.json
 \`\`\`
 
-この monorepo から実行する場合:
+まだ依存追加していない状態で一時実行する場合:
 
 \`\`\`bash
-yarn sdk:labcore lint --profile dev-sim
-yarn sdk:labcore preflight --profile dev-sim
-yarn sdk:labcore inspect --profile dev-sim
-yarn sdk:labcore guard prod --profile prod
-yarn sdk:labcore export --profile prod --out build/labcore-payload.json
+yarn dlx -p @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main labcore lint --profile dev-sim
+yarn dlx -p @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main labcore preflight --profile dev-sim
+yarn dlx -p @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main labcore inspect --profile dev-sim
+yarn dlx -p @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main labcore guard prod --profile prod
+yarn dlx -p @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main labcore export --profile prod --out build/labcore-payload.json
 \`\`\`
 
 ## 4. この雛形の初期値

@@ -10,4 +10,7 @@ test("installs ci template", () => {
   const result = installGitHubActionsTemplate(tempDir, true);
   assert.equal(result.written, true);
   assert.equal(fs.existsSync(result.path), true);
+  const content = fs.readFileSync(result.path, "utf8");
+  assert.match(content, /yarn exec labcore lint --profile dev-sim/);
+  assert.match(content, /yarn exec labcore export --profile prod --out build\/labcore-payload\.json/);
 });

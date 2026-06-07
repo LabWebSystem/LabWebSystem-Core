@@ -18,8 +18,8 @@ test("init generates SDK guide under labcore directory", () => {
     assert.equal(fs.existsSync(guidePath), true);
 
     const guide = fs.readFileSync(guidePath, "utf8");
-    assert.match(guide, /labcore lint --profile dev-sim/);
-    assert.match(guide, /yarn sdk:labcore lint --profile dev-sim/);
+    assert.match(guide, /yarn exec labcore lint --profile dev-sim/);
+    assert.match(guide, /yarn dlx -p @lab-core\/sdk-cli@git@github\.com:<ORG>\/<REPO>\.git#workspace=@lab-core\/sdk-cli&head=main labcore lint --profile dev-sim/);
     assert.match(guide, /labcore\.app\.yaml/);
     assert.match(guide, /対象アプリ: `demo-app`/);
   } finally {

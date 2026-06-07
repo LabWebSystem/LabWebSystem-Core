@@ -104,6 +104,13 @@ overrides:
   - 本番ガード条件
 
 ## 4. CLI コマンド
+新規作成したアプリリポジトリでは、まず `@lab-core/sdk-cli` を追加してから `yarn exec labcore ...` で使います。
+
+```bash
+yarn add -D @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main
+yarn exec labcore lint --profile dev-sim
+```
+
 - `init`
   - 雛形生成（`labcore/SDK使い方.md` を含む）
 - `inspect`
@@ -149,12 +156,12 @@ console.log(payload);
 
 ## 6. CI 連携
 `ci-install` を使うと `.github/workflows/labcore-sdk.yml` を追加できます。  
-この workflow では主に次を実行します。
+この workflow は、対象リポジトリ側の `devDependencies` に `@lab-core/sdk-cli` が入っている前提で、主に次を実行します。
 
-- `yarn sdk:labcore lint --profile dev-sim`
-- `yarn sdk:labcore preflight --profile dev-sim`
-- `yarn sdk:labcore guard prod`
-- `yarn sdk:labcore export --profile prod --out build/labcore-payload.json`
+- `yarn exec labcore lint --profile dev-sim`
+- `yarn exec labcore preflight --profile dev-sim`
+- `yarn exec labcore guard prod --profile prod`
+- `yarn exec labcore export --profile prod --out build/labcore-payload.json`
 
 ## 7. よくある失敗
 - `exposure.service` と compose のサービス名が一致しない

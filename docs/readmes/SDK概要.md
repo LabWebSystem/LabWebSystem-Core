@@ -24,25 +24,38 @@ SDK は、その「Lab-Core に統合できるアプリリポジトリ」を作�
 - seed / CI の導線を標準化する
 
 ## 3. 導入方法
-SDK は TypeScript ライブラリとして、GitHub リポジトリから直接導入できます。
+新しい Lab-Core 適合アプリを作るときは、まず CLI を一時実行して雛形を生成します。
+
+```bash
+yarn dlx -p @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main labcore init --template standard
+```
+
+継続的に lint / preflight / export / CI で使う場合は、新規作成したリポジトリ側に CLI を開発依存として追加します。
+
+```bash
+yarn add -D @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main
+```
+
+library API を使いたい場合だけ、必要に応じて `@lab-core/sdk` も追加します。
 
 ```bash
 yarn add @lab-core/sdk@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk&head=main
 ```
 
-使用例:
+library 使用例:
 ```ts
 import { lintSdk, inspectSdk, exportSdkPayload, guardProdSdk } from "@lab-core/sdk";
 ```
 
 ## 4. 基本フロー
-1. `yarn sdk:labcore init --template standard`
-2. 生成された `labcore.app.yaml` と profile を調整する
-3. `yarn sdk:labcore lint --profile dev-sim`
-4. `yarn sdk:labcore preflight --profile dev-sim`
-5. `yarn sdk:labcore guard prod`
-6. `yarn sdk:labcore export --profile prod --out build/labcore-payload.json`
-7. Lab-Core ダッシュボードで GitHub リポジトリを登録する
+1. `yarn dlx -p @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main labcore init --template standard`
+2. `yarn add -D @lab-core/sdk-cli@git@github.com:<ORG>/<REPO>.git#workspace=@lab-core/sdk-cli&head=main`
+3. 生成された `labcore.app.yaml` と profile を調整する
+4. `yarn exec labcore lint --profile dev-sim`
+5. `yarn exec labcore preflight --profile dev-sim`
+6. `yarn exec labcore guard prod --profile prod`
+7. `yarn exec labcore export --profile prod --out build/labcore-payload.json`
+8. Lab-Core ダッシュボードで GitHub リポジトリを登録する
 
 ## 5. 生成される主なファイル
 - `labcore.app.yaml`
