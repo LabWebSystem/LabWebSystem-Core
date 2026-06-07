@@ -23,3 +23,12 @@
 
 - プロジェクト内の `docs/logs` フォルダの下に新しいフォルダを作成する。
 - フォルダ名：**作成日時+短いトピック名**
+
+## ドキュメント配置ルール
+
+- ユーザーが説明書として本当に読むべき現行文書は `docs/readmes` に置く。
+- `docs/readmes` に置くファイル名は日本語で統一する。
+- 一時的な作業記録や単発作業の `task.md` / `implementation_plan.md` / `walkthrough.md` は `docs/logs` に置く。
+- `docs/logs` が肥大化してきたら、定期的に内容を統合して `docs/summarys` に要約を作成する。
+- 要約へ統合する前の元ログは `docs/archives` へ移動する。
+- 草案・検討中メモ・未確定文書は `docs/temps` に置く。

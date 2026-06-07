@@ -135,8 +135,8 @@ export const env = {
   appsRoot: toAbsolutePath(baseDir, process.env.LAB_CORE_APPS_ROOT ?? "./runtime/apps"),
   appDataRoot: toAbsolutePath(baseDir, process.env.LAB_CORE_APPDATA_ROOT ?? "./runtime/appdata"),
   executionMode: toExecutionMode(process.env.LAB_CORE_EXECUTION_MODE),
-  mainServiceIp: process.env.LAB_CORE_MAIN_SERVICE_IP ?? "192.168.11.224",
-  sshServiceIp: process.env.LAB_CORE_SSH_SERVICE_IP ?? "192.168.11.225",
+  mainServiceIp: process.env.LAB_CORE_MAIN_SERVICE_IP ?? "192.168.40.224",
+  sshServiceIp: process.env.LAB_CORE_SSH_SERVICE_IP ?? "192.168.40.224",
   rootDomain: process.env.LAB_CORE_ROOT_DOMAIN ?? "fukaya-sus.lab",
   generatedProxyConfigPath: toAbsolutePath(
     baseDir,

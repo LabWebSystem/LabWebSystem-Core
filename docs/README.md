@@ -1,13 +1,23 @@
 # docs 入口
 
-## 正式仕様（最新版）
-- `docs/20260516_230913_公式仕様統合/official_specification.md`
+## まず読む場所
+- 説明書一覧: `docs/readmes/説明書一覧.md`
+- 正式仕様（現行実装準拠）: `docs/archives/20260516_230913_公式仕様統合/official_specification.md`
 
-## 併設ドキュメント
-- `docs/20260516_230913_公式仕様統合/task.md`
-- `docs/20260516_230913_公式仕様統合/implementation_plan.md`
-- `docs/20260516_230913_公式仕様統合/walkthrough.md`
+## フォルダの役割
+- `docs/readmes`
+  - ユーザーが読む現行説明書を置く場所
+  - ファイル名は日本語で統一
+- `docs/logs`
+  - 単発作業の `task.md` / `implementation_plan.md` / `walkthrough.md` を置く場所
+- `docs/summarys`
+  - `docs/logs` を定期統合した要約を置く場所
+- `docs/archives`
+  - 統合前ログや旧版資料を保管する場所
+- `docs/temps`
+  - 草案や未確定メモを置く場所
 
-## 既存フォルダの扱い
-- 既存の各フォルダ（`task.md` / `implementation_plan.md` / `walkthrough.md` を含む）は履歴資料です。
-- 仕様判断・運用判断は最新版の正式仕様と実装コードを優先してください。
+## 運用ルール
+- 仕様判断・運用判断は実装コードと正式仕様を優先してください。
+- `docs/logs` が肥大化したら、内容を `docs/summarys` に要約し、元ログは `docs/archives` へ移動します。
+- 草案を現行説明書と同じ階層へ置かないでください。

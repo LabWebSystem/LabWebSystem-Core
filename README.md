@@ -57,8 +57,12 @@
 ## ドキュメント
 - docs 入口: `docs/README.md`
 - 正式仕様（現行実装準拠）:
-  - `docs/20260516_230913_公式仕様統合/official_specification.md`
+  - `docs/archives/20260516_230913_公式仕様統合/official_specification.md`
 - 操作説明（簡易）:
-  - `docs/readmes/how_to_use_lab_core.md`
+  - `docs/readmes/Lab-Core運用手順書.md`
 - 適合アプリ作成ガイド:
-  - `docs/lab_core_app_repository_guide/app_repository_creation_guide.md`
+  - `docs/readmes/適合アプリ作成ガイド.md`
+- SDK 概要:
+  - `docs/readmes/SDK概要.md`
+- SDK 仕様:
+  - `docs/readmes/SDK仕様書.md`

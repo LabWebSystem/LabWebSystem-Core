@@ -1,7 +1,17 @@
-# Lab-Core 使い方（現行実装準拠）
+# Lab-Core運用手順書
+
+対象読者:
+- 研究室メンバー
+- 運用担当者
+
+文書ステータス:
+- current
+
+最終更新日:
+- 2026-06-07
 
 補足:
-- 正式仕様は `docs/20260516_230913_公式仕様統合/official_specification.md` を参照してください。
+- 正式仕様は `docs/archives/20260516_230913_公式仕様統合/official_specification.md` を参照してください。
 
 ## 1. この説明書の対象
 この説明書は、研究室メンバーが Lab-Core でアプリを登録・確認・復旧するための操作手順です。
@@ -93,6 +103,8 @@
 - 設定変更は `yarn config:set`、確認は `yarn config:show`、直接編集は `yarn config:edit` を使用します。
 
 ## 10. 参考資料
-- 正式仕様: `docs/20260516_230913_公式仕様統合/official_specification.md`
+- 正式仕様: `docs/archives/20260516_230913_公式仕様統合/official_specification.md`
 - docs 入口: `docs/README.md`
-- 適合アプリ作成ガイド: `docs/lab_core_app_repository_guide/app_repository_creation_guide.md`
+- 説明書一覧: `docs/readmes/説明書一覧.md`
+- 適合アプリ作成ガイド: `docs/readmes/適合アプリ作成ガイド.md`
+- SDK 概要: `docs/readmes/SDK概要.md`
