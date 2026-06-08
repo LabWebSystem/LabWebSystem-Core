@@ -961,8 +961,11 @@ export function App() {
     <DashboardShell
       activeView={activeView}
       detailEnabled={selectedApplication !== null}
+      selectedApplicationName={selectedApplication?.name ?? null}
       executionMode={system?.execution?.mode ?? null}
+      system={system}
       loading={busy}
+      refreshing={refreshing}
       activeJobsCount={activeJobsCount}
       failedJobsCount={failedJobsCount}
       onNavigate={setActiveView}
