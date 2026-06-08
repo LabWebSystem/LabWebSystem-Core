@@ -1,21 +1,27 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  FaArrowLeft,
+  FaArrowUpFromBracket,
+  FaArrowsUpToLine,
+  FaClockRotateLeft,
+  FaFloppyDisk,
+  FaHammer,
+  FaPlay,
+  FaRotateLeft,
+  FaStop,
+  FaTrash
+} from "react-icons/fa6";
 import { ComposeInspectDialog } from "../components/ComposeInspectDialog";
 import type { ApplicationDetail, ApplicationJob, ApplicationListItem, ComposeServiceCandidate, DeleteMode } from "../types";
 import {
-  applicationStatusMeta,
   buildOperationLockReason,
   canCancelJob,
   canDeleteJob,
   canRetryJob,
-  formatElapsed,
-  formatRelative,
-  healthBadgeClass,
   healthMeta,
-  jobStatusBadgeClass,
   jobStatusLabel,
   jobTypeLabel,
   logLineClass,
-  shortCommit,
   statusBadgeClass,
   toLocale
 } from "../ui";
@@ -89,6 +95,20 @@ type ApplicationDetailViewProps = {
   onDeleteSubmit: () => void;
 };
 
+function panelTitle(title: string) {
+  return <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">{title}</h3>;
+}
+
+function actionButtonBase(tone: "default" | "danger" | "primary") {
+  if (tone === "danger") {
+    return "flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50/50 px-3.5 py-2 text-sm font-bold text-red-700 transition-all hover:bg-red-50 active:scale-95";
+  }
+  if (tone === "primary") {
+    return "flex items-center gap-1.5 rounded-lg bg-amber-500 px-3.5 py-2 text-sm font-bold text-white transition-all hover:bg-amber-600 active:scale-95";
+  }
+  return "flex items-center gap-1.5 rounded-lg border border-slate-200 px-3.5 py-2 text-sm font-bold text-slate-700 transition-all hover:bg-slate-50 active:scale-95";
+}
+
 export function ApplicationDetailView(props: ApplicationDetailViewProps) {
   const {
     application,
@@ -128,13 +148,9 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
     onDeleteConfirmChange,
     onDeleteSubmit
   } = props;
-  const logViewerRef = useRef<HTMLDivElement | null>(null);
-  const [deploymentExpanded, setDeploymentExpanded] = useState(true);
-  const [alertsExpanded, setAlertsExpanded] = useState(true);
-  const [jobsExpanded, setJobsExpanded] = useState(true);
-  const [eventsExpanded, setEventsExpanded] = useState(true);
-  const [logsExpanded, setLogsExpanded] = useState(false);
+
   const [inspectDialogOpen, setInspectDialogOpen] = useState(false);
+  const logViewerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!logs.opened || !logs.autoScroll || !logViewerRef.current) {
@@ -144,598 +160,120 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
   }, [logs.autoScroll, logs.lines, logs.opened]);
 
   useEffect(() => {
-    setDeploymentExpanded(true);
-    setAlertsExpanded(true);
-    setJobsExpanded(true);
-    setEventsExpanded(true);
-    setLogsExpanded(false);
     setInspectDialogOpen(false);
   }, [application?.application_id]);
 
   if (!application) {
     return (
-      <div className="view-grid detail-view">
-        <section className="panel-card">
-          <h2>アプリ詳細</h2>
-          <p className="empty-message">アプリを選択すると詳細を表示します。</p>
-          <button type="button" className="button primary" onClick={onBackToApplications}>
-            アプリ一覧へ
-          </button>
-        </section>
+      <div className="p-6">
+        <div className="rounded-2xl border border-slate-200/60 bg-white p-6 shadow-sm">
+          <p className="text-sm text-slate-500">アプリを選択すると詳細を表示します。</p>
+        </div>
       </div>
     );
   }
 
   const currentApplication = application;
-  const recentEvents = (detail?.events ?? []).slice(0, 20);
   const relatedJobs = jobs.length > 0 ? jobs : detail?.jobs ?? [];
-  const deployment = detail?.deployment;
-  const composeCandidates = deploymentComposeState.composeCandidates;
-  const otherYamlFiles = deploymentComposeState.yamlFiles.filter((yamlPath) => !composeCandidates.includes(yamlPath));
-  const environmentRequirements = deploymentComposeState.inspection?.environmentRequirements ?? [];
-  const environmentRequirementMap = new Map(environmentRequirements.map((requirement) => [requirement.name, requirement]));
-  const envOverrideKeys = [...new Set([...environmentRequirements.map((requirement) => requirement.name), ...Object.keys(deploymentForm.envOverrides)])]
-    .sort((a, b) => a.localeCompare(b));
-  const deploymentEnabled = detail?.deployment?.enabled ?? currentApplication.status !== "Stopped";
-  const status = applicationStatusMeta(currentApplication.status);
-  const health = healthMeta(detail?.health ?? currentApplication.health);
-  const latestActiveJob = relatedJobs.find((job) => job.status === "running" || job.status === "queued") ?? null;
+  const recentEvents = detail?.events ?? [];
+  const currentHealth = healthMeta(detail?.health ?? currentApplication.health);
   const operationLockReason = buildOperationLockReason(currentApplication);
-  const latestErrorSummary = currentApplication.latest_error_title || currentApplication.latest_error_message;
+  const envKeys = [...new Set(Object.keys(deploymentForm.envOverrides))].sort((a, b) => a.localeCompare(b));
 
-  function toggleLogsPanel(): void {
-    const nextExpanded = !logsExpanded;
-    setLogsExpanded(nextExpanded);
-
-    if (nextExpanded && !logs.opened && !logs.loading) {
+  function ensureLogsOpened() {
+    if (!logs.opened && !logs.loading) {
       onOpenLogs(currentApplication);
     }
   }
 
-  function copyAlert(): void {
-    if (!latestErrorSummary) {
-      return;
-    }
-
-    const payload = [
-      `アプリ: ${currentApplication.name}`,
-      `発生時刻: ${currentApplication.latest_error_at ? toLocale(currentApplication.latest_error_at) : "未記録"}`,
-      currentApplication.latest_error_title ? `件名: ${currentApplication.latest_error_title}` : "",
-      currentApplication.latest_error_message ?? ""
-    ]
-      .filter((line) => line.length > 0)
-      .join("\n");
-
-    void navigator.clipboard.writeText(payload);
-  }
-
   return (
-    <div className="view-grid detail-view">
-      <section className="panel-card detail-hero-card">
-        <div className="panel-head">
-          <div>
-            <p className="section-kicker">DETAIL</p>
-            <h2>{currentApplication.name}</h2>
-            <p className="panel-sub">{currentApplication.description || "アプリの運用状態と操作履歴をここで確認できます。"}</p>
-          </div>
-          <button type="button" className="button secondary" onClick={onBackToApplications}>
-            一覧へ戻る
-          </button>
-        </div>
-
-        <div className="detail-stat-grid">
-          <article className="detail-stat-card">
-            <p>アプリ状態</p>
-            <strong><span className={statusBadgeClass(currentApplication.status)}>{status.label}</span></strong>
-            <span>{status.description}</span>
-          </article>
-          <article className="detail-stat-card">
-            <p>ヘルス</p>
-            <strong><span className={healthBadgeClass(detail?.health ?? currentApplication.health)}>{health.label}</span></strong>
-            <span>{health.description}</span>
-          </article>
-          <article className="detail-stat-card">
-            <p>公開 URL</p>
-            <strong>
-              <a href={`http://${currentApplication.hostname}`} target="_blank" rel="noreferrer">
-                {currentApplication.hostname}
-              </a>
-            </strong>
-            <span>{deploymentEnabled ? "公開中" : "停止中"}</span>
-          </article>
-          <article className="detail-stat-card">
-            <p>現在のコミット</p>
-            <strong>{shortCommit(currentApplication.current_commit)}</strong>
-            <span>前回 {shortCommit(currentApplication.previous_commit)}</span>
-          </article>
-        </div>
-
-        <div className="detail-summary-grid">
-          <div className="detail-summary-block">
-            <span>ブランチ</span>
-            <strong>{currentApplication.default_branch}</strong>
-          </div>
-          <div className="detail-summary-block">
-            <span>登録日</span>
-            <strong>{toLocale(currentApplication.created_at)}</strong>
-          </div>
-          <div className="detail-summary-block">
-            <span>最終更新</span>
-            <strong>{formatRelative(currentApplication.updated_at)}</strong>
-          </div>
-          <div className="detail-summary-block">
-            <span>内部 Compose 名</span>
-            <strong>{deployment?.compose_project_name ?? "legacy"}</strong>
-          </div>
-        </div>
-
-        {latestActiveJob ? (
-          <div className="detail-progress-card">
-            <div className="panel-head compact">
-              <h3>進行中の処理</h3>
-              <span className={jobStatusBadgeClass(latestActiveJob.status)}>
-                {jobTypeLabel(latestActiveJob.type)} / {jobStatusLabel(latestActiveJob.status)}
-              </span>
-            </div>
-            {latestActiveJob.message ? <p className="detail-progress-message">{latestActiveJob.message}</p> : null}
-            <div className="detail-progress-meta">
-              <p>作成: {toLocale(latestActiveJob.created_at)}</p>
-              <p>開始: {toLocale(latestActiveJob.started_at)}</p>
-              <p>経過: {formatElapsed(latestActiveJob.started_at ?? latestActiveJob.created_at)}</p>
-            </div>
-            <p className="panel-sub">処理完了までは競合操作を無効化しています。</p>
-          </div>
-        ) : null}
-
-        <div className={`panel-card accordion-card inline-accordion ${alertsExpanded ? "open" : ""}`}>
-          <button
-            type="button"
-            className="accordion-toggle"
-            onClick={() => setAlertsExpanded((prev) => !prev)}
-            aria-expanded={alertsExpanded}
-          >
-            <div>
-              <h2>現在のアラート</h2>
-              <p className="panel-sub">
-                {latestErrorSummary
-                  ? "この画面のアラートは直近の処理結果に紐づきます。履歴は下のイベント・ジョブから追跡できます。"
-                  : "直近の失敗や警告はありません。"}
-              </p>
-            </div>
-            <span className="accordion-meta">{alertsExpanded ? "折りたたむ" : "開く"}</span>
-          </button>
-
-          <div className={`accordion-body-wrap ${alertsExpanded ? "open" : ""}`}>
-            <div className="accordion-body-inner">
-              <div className="accordion-body">
-                {latestErrorSummary ? (
-                  <div className="detail-error-card">
-                    <div className="panel-head compact">
-                      <strong>{currentApplication.latest_error_title ?? "エラー詳細"}</strong>
-                      <button type="button" className="button tiny ghost" onClick={copyAlert}>
-                        コピー
-                      </button>
-                    </div>
-                    <p>{currentApplication.latest_error_at ? toLocale(currentApplication.latest_error_at) : "時刻不明"}</p>
-                    {currentApplication.latest_error_message ? <pre>{currentApplication.latest_error_message}</pre> : null}
-                  </div>
-                ) : (
-                  <p className="empty-message">このアプリの直近アラートはありません。</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="detail-actions">
-          {deploymentEnabled ? (
-            <button
-              type="button"
-              className="button tiny secondary"
-              onClick={() => onStop(currentApplication.application_id, currentApplication.name)}
-              disabled={Boolean(operationLockReason)}
-              title={operationLockReason ?? ""}
-            >
-              停止
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="button tiny primary"
-              onClick={() => onResume(currentApplication.application_id, currentApplication.name)}
-              disabled={Boolean(operationLockReason)}
-              title={operationLockReason ?? ""}
-            >
-              再開
-            </button>
-          )}
-          <button
-            type="button"
-            className="button tiny"
-            onClick={() => onRestart(currentApplication.application_id, currentApplication.name)}
-            disabled={!deploymentEnabled || Boolean(operationLockReason)}
-            title={operationLockReason ?? (!deploymentEnabled ? "停止中は再開してから再起動してください" : "")}
-          >
-            再起動
-          </button>
-          <button
-            type="button"
-            className="button tiny secondary"
-            onClick={() => onRebuild(currentApplication.application_id, currentApplication.name)}
-            disabled={Boolean(operationLockReason)}
-            title={operationLockReason ?? ""}
-          >
-            再ビルド
-          </button>
-          <button
-            type="button"
-            className="button tiny warn"
-            onClick={() => onCheckUpdate(currentApplication.application_id, currentApplication.name)}
-            disabled={Boolean(operationLockReason)}
-            title={operationLockReason ?? ""}
-          >
-            更新確認
-          </button>
-          <button
-            type="button"
-            className="button tiny warn"
-            onClick={() => onApplyUpdate(currentApplication.application_id, currentApplication.name)}
-            disabled={Boolean(operationLockReason)}
-            title={operationLockReason ?? ""}
-          >
-            更新適用
-          </button>
-          <button
-            type="button"
-            className="button tiny"
-            onClick={() => onRollback(currentApplication.application_id, currentApplication.name)}
-            disabled={!currentApplication.previous_commit || Boolean(operationLockReason)}
-            title={operationLockReason ?? (!currentApplication.previous_commit ? "ロールバック可能な1つ前コミットがありません" : "")}
-          >
-            ロールバック
-          </button>
-        </div>
-
-        {operationLockReason ? <p className="hint warning">{operationLockReason}</p> : null}
-      </section>
-
-      <section className={`panel-card accordion-card ${deploymentExpanded ? "open" : ""}`}>
-        <button
-          type="button"
-          className="accordion-toggle"
-          onClick={() => setDeploymentExpanded((prev) => !prev)}
-          aria-expanded={deploymentExpanded}
-        >
-          <div>
-            <h2>デプロイ設定</h2>
-            <p className="panel-sub">
-              保存すると公開先と次回以降のデプロイ設定に反映されます。
-              {detailLoading ? " 読み込み中..." : ""}
-            </p>
-          </div>
-          <span className="accordion-meta">{deploymentExpanded ? "折りたたむ" : "開く"}</span>
+    <div className="min-h-0">
+      <div className="flex items-center gap-4 border-b border-slate-200 bg-white px-6 py-4">
+        <button type="button" onClick={onBackToApplications} className="text-lg text-slate-400 transition-colors hover:text-slate-600">
+          <FaArrowLeft />
         </button>
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-bold text-slate-800">{currentApplication.name}</h2>
+            <span className={statusBadgeClass(currentApplication.status)}>{currentApplication.status}</span>
+          </div>
+          <p className="text-xs text-slate-400">{currentApplication.repository_url}</p>
+        </div>
+      </div>
 
-        <div className={`accordion-body-wrap ${deploymentExpanded ? "open" : ""}`}>
-          <div className="accordion-body-inner">
-            <div className="accordion-body">
-        {deployment ? (
-          <>
-            <div className="deployment-picker-section">
-              <div className="compose-summary-row">
-                <p>
-                  選択中: <code>{deploymentForm.composePath}</code>
-                </p>
-                {deploymentComposeState.inspection ? (
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label="取得した YAML と解析結果を表示"
-                    title="取得した YAML と解析結果を表示"
-                    onClick={() => setInspectDialogOpen(true)}
-                    disabled={deploymentComposeState.status === "loading"}
-                  >
-                    i
-                  </button>
-                ) : null}
-              </div>
-
-              <p className="hint">compose 候補から選択</p>
-              {composeCandidates.length > 0 ? (
-                <div className="chip-list">
-                  {composeCandidates.map((composePath) => (
-                    <button
-                      key={composePath}
-                      type="button"
-                      className={`chip-button ${deploymentForm.composePath === composePath ? "active" : ""}`}
-                      onClick={() => onSelectDeploymentCompose(composePath)}
-                      disabled={loading || deploymentComposeState.status === "loading"}
-                    >
-                      {composePath}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="hint warning">compose 候補をまだ検出できていません。</p>
-              )}
-
-              {otherYamlFiles.length > 0 ? (
-                <div className="yaml-block">
-                  <p className="hint">その他の YAML ファイル</p>
-                  <div className="yaml-file-list">
-                    {otherYamlFiles.map((yamlPath) => (
-                      <button
-                        key={yamlPath}
-                        type="button"
-                        className={`file-link-button ${deploymentForm.composePath === yamlPath ? "active" : ""}`}
-                        onClick={() => onSelectDeploymentCompose(yamlPath)}
-                        disabled={loading || deploymentComposeState.status === "loading"}
-                      >
-                        {yamlPath}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+      <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              {panelTitle("コントロールパネル")}
+              {currentApplication.has_update ? (
+                <span className="animate-pulse rounded border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-600">
+                  更新あり
+                </span>
               ) : null}
-
-              {deploymentComposeState.warning ? <p className="hint warning">{deploymentComposeState.warning}</p> : null}
             </div>
 
-            <div className="deployment-picker-section">
-              <p className="hint">公開サービスを選択</p>
-              {deploymentComposeState.services.length > 0 ? (
-                <div className="service-grid">
-                  {deploymentComposeState.services.map((service) => (
-                    <button
-                      key={service.name}
-                      type="button"
-                      className={`service-card ${deploymentForm.publicServiceName === service.name ? "active" : ""}`}
-                      onClick={() => onSelectDeploymentService(service)}
-                      disabled={loading || deploymentComposeState.status === "loading"}
-                    >
-                      <strong>{service.name}</strong>
-                      <span>{service.likelyPublic ? "公開候補" : "候補"}</span>
-                      <span>推定ポート: {service.detectedPublicPort ?? "未検出"}</span>
-                      <span>ports/expose: {service.portOptions.length > 0 ? service.portOptions.join(", ") : "なし"}</span>
-                      <span>{service.reason}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="hint warning">
-                  {deploymentComposeState.inspection?.parseError
-                    ? "YAML の parse に失敗しました。上の i ボタンから raw YAML と parse error を確認できます。"
-                    : "compose を選ぶとサービス候補が表示されます。"}
-                </p>
-              )}
-            </div>
-
-            <div className="form-grid deployment-form-grid">
-              <label>
-                公開ホスト名
-                <input
-                  value={deploymentForm.hostname}
-                  onChange={(event) => onDeploymentFieldChange("hostname", event.target.value)}
-                  placeholder="example.fukaya-sus.lab"
-                />
-              </label>
-              <label>
-                公開ポート
-                <input
-                  inputMode="numeric"
-                  value={deploymentForm.publicPort}
-                  onChange={(event) => onDeploymentFieldChange("publicPort", event.target.value)}
-                  placeholder="3000"
-                />
-              </label>
-            </div>
-
-            <label className="checkbox-row detail-checkbox-row">
-              <input
-                type="checkbox"
-                checked={deploymentForm.keepVolumesOnRebuild}
-                onChange={(event) => onDeploymentFieldChange("keepVolumesOnRebuild", event.target.checked)}
-              />
-              再ビルド時にデータを保持する
-            </label>
-
-            {envOverrideKeys.length > 0 ? (
-              <div className="deployment-picker-section">
-                <p className="hint">compose から検出した環境変数</p>
-                <div className="env-override-grid">
-                  {envOverrideKeys.map((name) => {
-                    const requirement = environmentRequirementMap.get(name);
-                    return (
-                      <label key={name} className="env-override-card">
-                        <span>
-                          {name}
-                          {requirement?.required ? " *" : ""}
-                        </span>
-                        <input
-                          value={deploymentForm.envOverrides[name] ?? ""}
-                          onChange={(event) => onDeploymentEnvironmentOverrideChange(name, event.target.value)}
-                          placeholder={requirement?.defaultValue ?? "値を入力"}
-                        />
-                        <small className="hint">
-                          {requirement
-                            ? `services: ${requirement.services.join(", ")}`
-                            : "保存済み override"}
-                          {requirement?.required
-                            ? " / 必須"
-                            : requirement && requirement.defaultValue !== null
-                              ? ` / 既定値: ${requirement.defaultValue}`
-                              : ""}
-                        </small>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="detail-actions">
+            <div className="flex flex-wrap gap-2.5">
               <button
                 type="button"
-                className="button primary"
-                onClick={onSaveDeployment}
-                disabled={loading || !deploymentDirty}
+                onClick={() => onResume(currentApplication.application_id, currentApplication.name)}
+                disabled={Boolean(operationLockReason)}
+                className={actionButtonBase("default")}
               >
-                デプロイ設定を保存
+                <FaPlay className="text-emerald-500" />
+                起動
               </button>
               <button
                 type="button"
-                className="button secondary"
-                onClick={onResetDeployment}
-                disabled={loading || !deploymentDirty}
+                onClick={() => onStop(currentApplication.application_id, currentApplication.name)}
+                disabled={Boolean(operationLockReason)}
+                className={actionButtonBase("default")}
               >
-                編集を戻す
+                <FaStop className="text-rose-500" />
+                停止
+              </button>
+              <button type="button" onClick={() => onRestart(currentApplication.application_id, currentApplication.name)} disabled={Boolean(operationLockReason)} className={actionButtonBase("default")}>
+                <FaRotateLeft className="text-amber-500" />
+                再起動
+              </button>
+              <button type="button" onClick={() => onRebuild(currentApplication.application_id, currentApplication.name)} disabled={Boolean(operationLockReason)} className={actionButtonBase("default")}>
+                <FaHammer className="text-blue-500" />
+                再構築
+              </button>
+              <button type="button" onClick={() => onCheckUpdate(currentApplication.application_id, currentApplication.name)} disabled={Boolean(operationLockReason)} className={actionButtonBase("default")}>
+                <FaArrowsUpToLine />
+                更新確認
+              </button>
+              <button type="button" onClick={() => onApplyUpdate(currentApplication.application_id, currentApplication.name)} disabled={Boolean(operationLockReason)} className={actionButtonBase("primary")}>
+                <FaArrowUpFromBracket />
+                更新適用
+              </button>
+              <button type="button" onClick={() => onRollback(currentApplication.application_id, currentApplication.name)} disabled={Boolean(operationLockReason)} className={actionButtonBase("default")}>
+                <FaClockRotateLeft />
+                ロールバック
+              </button>
+              <button type="button" className={`${actionButtonBase("danger")} ml-auto`} disabled>
+                <FaTrash />
+                削除
               </button>
             </div>
-          </>
-        ) : (
-          <p className="empty-message">
-            {detailLoading ? "デプロイ設定を読み込んでいます..." : "このアプリのデプロイ設定はまだ取得できていません。"}
-          </p>
-        )}
-            </div>
-          </div>
-        </div>
-      </section>
 
-      <section className={`panel-card accordion-card ${jobsExpanded ? "open" : ""}`}>
-        <button
-          type="button"
-          className="accordion-toggle"
-          onClick={() => setJobsExpanded((prev) => !prev)}
-          aria-expanded={jobsExpanded}
-        >
-          <div>
-            <h2>関連ジョブ</h2>
-            <p className="panel-sub">待機中・実行中・失敗・完了を時系列で確認できます。</p>
+            {operationLockReason ? <p className="mt-3 text-sm text-amber-700">{operationLockReason}</p> : null}
           </div>
-          <span className="accordion-meta">{relatedJobs.length} 件 / {jobsExpanded ? "折りたたむ" : "開く"}</span>
-        </button>
 
-        <div className={`accordion-body-wrap ${jobsExpanded ? "open" : ""}`}>
-          <div className="accordion-body-inner">
-            <div className="accordion-body">
-              {relatedJobs.length === 0 ? (
-                <p className="empty-message">このアプリに紐づくジョブはまだありません。</p>
-              ) : (
-                <div className="job-history-list">
-                  {relatedJobs.map((job) => (
-                    <article key={job.job_id} className="job-card">
-                      <div className="job-card-head">
-                        <div>
-                          <strong>{jobTypeLabel(job.type)}</strong>
-                          <p>{job.message ?? "詳細メッセージはありません。"}</p>
-                        </div>
-                        <span className={jobStatusBadgeClass(job.status)}>{jobStatusLabel(job.status)}</span>
-                      </div>
-                      <div className="job-card-meta">
-                        <span>作成 {toLocale(job.created_at)}</span>
-                        <span>開始 {toLocale(job.started_at)}</span>
-                        <span>経過 {formatElapsed(job.started_at ?? job.created_at, job.finished_at)}</span>
-                      </div>
-                      <div className="job-card-actions">
-                        {canCancelJob(job) ? (
-                          <button type="button" className="button tiny warn" onClick={() => onCancelJob(job.job_id)}>
-                            待機を取り消す
-                          </button>
-                        ) : null}
-                        {canRetryJob(job) ? (
-                          <button
-                            type="button"
-                            className="button tiny primary"
-                            onClick={() => onRetryJob(job.job_id, jobTypeLabel(job.type))}
-                          >
-                            再実行
-                          </button>
-                        ) : null}
-                        {canDeleteJob(job) ? (
-                          <button type="button" className="button tiny secondary" onClick={() => onDeleteJob(job.job_id)}>
-                            削除
-                          </button>
-                        ) : null}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className={`panel-card accordion-card ${eventsExpanded ? "open" : ""}`}>
-        <button
-          type="button"
-          className="accordion-toggle"
-          onClick={() => setEventsExpanded((prev) => !prev)}
-          aria-expanded={eventsExpanded}
-        >
-          <div>
-            <h2>最近の進行イベント</h2>
-            <p className="panel-sub">10秒ごとに自動更新します。</p>
-          </div>
-          <span className="accordion-meta">{recentEvents.length} 件 / {eventsExpanded ? "折りたたむ" : "開く"}</span>
-        </button>
-
-        <div className={`accordion-body-wrap ${eventsExpanded ? "open" : ""}`}>
-          <div className="accordion-body-inner">
-            <div className="accordion-body detail-events-scroll">
-            {recentEvents.length === 0 ? (
-              <p className="empty-message">
-                {detailLoading ? "イベントを読み込んでいます..." : "このアプリに紐づくイベントはまだありません。"}
-              </p>
-            ) : (
-              <ul className="event-list detail-event-list">
-                {recentEvents.map((event) => (
-                  <li key={event.event_id} className={`event-item ${event.level}`}>
-                    <div>
-                      <strong>{event.title}</strong>
-                      <p>{event.message}</p>
-                      {(event.message.includes("\n") || event.message.length > 140) ? (
-                        <details className="event-details">
-                          <summary>詳細を開く</summary>
-                          <pre>{event.message}</pre>
-                        </details>
-                      ) : null}
-                    </div>
-                    <time>{toLocale(event.created_at)}</time>
-                  </li>
-                ))}
-              </ul>
-            )}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className={`panel-card accordion-card ${logsExpanded ? "open" : ""}`}>
-        <button type="button" className="accordion-toggle" onClick={toggleLogsPanel} aria-expanded={logsExpanded}>
-          <div>
-            <h2>ログ確認</h2>
-            <p className="panel-sub">
-              {logs.lastFetchedAt.length > 0 ? `最終取得: ${toLocale(logs.lastFetchedAt)}` : "開くと5秒ごとに自動更新します。"}
-            </p>
-          </div>
-          <span className="accordion-meta">{logsExpanded ? "折りたたむ" : "開く"}</span>
-        </button>
-
-        <div className={`accordion-body-wrap ${logsExpanded ? "open" : ""}`}>
-          <div className="accordion-body-inner">
-            <div className="accordion-body">
-            <div className="logs-controls">
-              <label>
-                サービス
+          <div className="flex h-[400px] flex-col rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+            <div className="mb-3 flex shrink-0 items-center justify-between">
+              <div className="flex items-center gap-2">
+                {panelTitle("ライブログ")}
                 <select
                   value={logs.selectedService}
+                  onFocus={ensureLogsOpened}
                   onChange={(event) => {
                     const service = event.target.value;
                     onSetSelectedLogService(service);
                     onRefreshLogs(service);
                   }}
+                  className="rounded border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 focus:outline-none"
                 >
                   <option value="">全サービス</option>
                   {logs.services.map((service) => (
@@ -744,78 +282,338 @@ export function ApplicationDetailView(props: ApplicationDetailViewProps) {
                     </option>
                   ))}
                 </select>
-              </label>
-              <label>
-                表示行数
                 <select
                   value={String(logs.tail)}
+                  onFocus={ensureLogsOpened}
                   onChange={(event) => {
                     const tail = Number(event.target.value);
                     onSetLogTail(tail);
                     onRefreshLogs(undefined, tail);
                   }}
+                  className="rounded border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 focus:outline-none"
                 >
-                  <option value="100">100</option>
-                  <option value="200">200</option>
-                  <option value="500">500</option>
-                  <option value="1000">1000</option>
+                  <option value="50">50行</option>
+                  <option value="100">100行</option>
+                  <option value="200">200行</option>
+                  <option value="500">500行</option>
                 </select>
-              </label>
-              <label className="checkbox-row">
-                <input type="checkbox" checked={logs.autoScroll} onChange={(event) => onSetAutoScroll(event.target.checked)} />
-                自動スクロール
-              </label>
-              <button type="button" className="button tiny secondary" onClick={() => onRefreshLogs()} disabled={logs.loading}>
-                {logs.loading ? "取得中..." : "ログ更新"}
-              </button>
+              </div>
+              <div className="flex items-center gap-4 text-xs text-slate-400">
+                <label className="flex cursor-pointer items-center gap-1.5 font-semibold">
+                  <input type="checkbox" checked={logs.autoScroll} onChange={(event) => onSetAutoScroll(event.target.checked)} className="rounded border-slate-300" />
+                  自動スクロール
+                </label>
+                <button type="button" onClick={() => { ensureLogsOpened(); onRefreshLogs(); }} className="font-semibold text-violet-600 hover:text-violet-700">
+                  {logs.loading ? "取得中..." : "更新"}
+                </button>
+                <span>{logs.lastFetchedAt ? `${toLocale(logs.lastFetchedAt)}取得` : "--:--:--取得"}</span>
+              </div>
             </div>
-
-            <div className="log-viewer detail-log-viewer" ref={logViewerRef}>
+            <div ref={logViewerRef} className="flex-1 overflow-y-auto rounded-xl bg-slate-900 p-4 font-mono text-sm text-slate-200" onMouseEnter={ensureLogsOpened}>
               {logs.lines.length === 0 ? (
-                <p className="log-empty">{logs.loading ? "ログを取得しています..." : "表示できるログがありません。"}</p>
+                <p className="text-slate-400">{logs.loading ? "ログを取得しています..." : "ログはまだありません。"}</p>
               ) : (
-                <ul className="log-lines">
+                <ul className="space-y-1">
                   {logs.lines.map((line, index) => (
-                    <li key={`${index}-${line.slice(0, 30)}`} className={logLineClass(line)}>
+                    <li key={`${index}-${line.slice(0, 20)}`} className={logLineClass(line)}>
                       {line}
                     </li>
                   ))}
                 </ul>
               )}
             </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              {panelTitle("デプロイ設定")}
+              <div className="flex items-center gap-2">
+                {deploymentComposeState.inspection ? (
+                  <button type="button" onClick={() => setInspectDialogOpen(true)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                    解析結果
+                  </button>
+                ) : null}
+                <button type="button" onClick={onSaveDeployment} disabled={loading || !deploymentDirty} className="flex items-center gap-1 rounded-lg bg-violet-600 px-4 py-2 text-sm font-bold text-white transition-all shadow-sm hover:bg-violet-700 disabled:opacity-50">
+                  <FaFloppyDisk className="text-xs" />
+                  設定保存
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {deploymentComposeState.composeCandidates.length > 0 ? (
+                <div>
+                  <label className="mb-2 block text-xs font-bold text-slate-500">Compose候補</label>
+                  <div className="flex flex-wrap gap-2">
+                    {deploymentComposeState.composeCandidates.map((composePath) => (
+                      <button
+                        key={composePath}
+                        type="button"
+                        onClick={() => onSelectDeploymentCompose(composePath)}
+                        className={`rounded-full border px-3 py-1.5 text-sm font-semibold ${
+                          deploymentForm.composePath === composePath
+                            ? "border-violet-200 bg-violet-50 text-violet-700"
+                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        {composePath}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {deploymentComposeState.services.length > 0 ? (
+                <div>
+                  <label className="mb-2 block text-xs font-bold text-slate-500">公開対象サービス名</label>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {deploymentComposeState.services.map((service) => (
+                      <button
+                        key={service.name}
+                        type="button"
+                        onClick={() => onSelectDeploymentService(service)}
+                        className={`rounded-xl border p-3 text-left ${
+                          deploymentForm.publicServiceName === service.name
+                            ? "border-violet-200 bg-violet-50 text-violet-800"
+                            : "border-slate-200 bg-white text-slate-700"
+                        }`}
+                      >
+                        <div className="font-bold">{service.name}</div>
+                        <div className="mt-1 text-xs">{service.detectedPublicPort ? `推定ポート ${service.detectedPublicPort}` : "ポート未検出"}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-500">Composeファイルパス</label>
+                  <input
+                    type="text"
+                    value={deploymentForm.composePath}
+                    onChange={(event) => onDeploymentFieldChange("composePath", event.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-500">ホスト名</label>
+                  <input
+                    type="text"
+                    value={deploymentForm.hostname}
+                    onChange={(event) => onDeploymentFieldChange("hostname", event.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-500">公開対象サービス名</label>
+                  <input
+                    type="text"
+                    value={deploymentForm.publicServiceName}
+                    onChange={(event) => onDeploymentFieldChange("publicServiceName", event.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-500">公開ポート番号</label>
+                  <input
+                    type="number"
+                    value={deploymentForm.publicPort}
+                    onChange={(event) => onDeploymentFieldChange("publicPort", event.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-6 py-2">
+                <label className="flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={deploymentForm.keepVolumesOnRebuild}
+                    onChange={(event) => onDeploymentFieldChange("keepVolumesOnRebuild", event.target.checked)}
+                    className="rounded border-slate-300"
+                  />
+                  再構築時に永続ボリュームを保持する
+                </label>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-bold text-slate-500">環境変数の設定</label>
+                <div className="space-y-2">
+                  {envKeys.map((key) => (
+                    <div key={key} className="grid grid-cols-1 gap-2 sm:grid-cols-[180px_minmax(0,1fr)]">
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">{key}</div>
+                      <input
+                        type="text"
+                        value={deploymentForm.envOverrides[key] ?? ""}
+                        onChange={(event) => onDeploymentEnvironmentOverrideChange(key, event.target.value)}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:border-violet-500"
+                      />
+                    </div>
+                  ))}
+                  {envKeys.length === 0 ? <p className="text-sm text-slate-400">設定済みの環境変数はありません。</p> : null}
+                </div>
+              </div>
+
+              {deploymentComposeState.warning ? <p className="text-sm text-amber-700">{deploymentComposeState.warning}</p> : null}
+              <div className="flex gap-2">
+                <button type="button" onClick={onResetDeployment} disabled={loading || !deploymentDirty} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">
+                  編集を戻す
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              {panelTitle("関連ジョブ")}
+              <span className="text-xs font-semibold text-slate-400">{relatedJobs.length}件</span>
+            </div>
+            <div className="space-y-3">
+              {relatedJobs.length === 0 ? <p className="text-sm text-slate-400">関連ジョブはまだありません。</p> : null}
+              {relatedJobs.map((job) => (
+                <div key={job.job_id} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{jobTypeLabel(job.type)}</p>
+                      <p className="mt-1 text-xs text-slate-400">{jobStatusLabel(job.status)}</p>
+                    </div>
+                    <span className="text-xs text-slate-400">{toLocale(job.created_at)}</span>
+                  </div>
+                  {job.message ? <p className="mt-2 text-sm text-slate-600">{job.message}</p> : null}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {canCancelJob(job) ? (
+                      <button type="button" onClick={() => onCancelJob(job.job_id)} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-bold text-amber-700">
+                        取り消す
+                      </button>
+                    ) : null}
+                    {canRetryJob(job) ? (
+                      <button type="button" onClick={() => onRetryJob(job.job_id, jobTypeLabel(job.type))} className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-bold text-white">
+                        再実行
+                      </button>
+                    ) : null}
+                    {canDeleteJob(job) ? (
+                      <button type="button" onClick={() => onDeleteJob(job.job_id)} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-700">
+                        削除
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
-      </section>
 
-      <section className="panel-card danger-card">
-        <h2>削除</h2>
-        <p className="panel-sub">破壊的操作です。対象アプリ名の確認と削除範囲の明示を必須にしています。</p>
-        <div className="delete-grid">
-          <label>
-            削除モード
-            <select value={deleteMode} onChange={(event) => onDeleteModeChange(event.target.value as DeleteMode)}>
-              <option value="config_only">構成のみ削除</option>
-              <option value="source_and_config">構成 + ソース削除</option>
-              <option value="full">構成 + ソース + データ削除</option>
-            </select>
-          </label>
-          <label>
-            確認用アプリ名
-            <input
-              placeholder={currentApplication.name}
-              value={deleteConfirmText}
-              onChange={(event) => onDeleteConfirmChange(event.target.value)}
-            />
-          </label>
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+            {panelTitle("ヘルスチェック詳細")}
+            <div className="mt-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <span
+                  className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white ${
+                    currentHealth.tone === "ok"
+                      ? "bg-emerald-500"
+                      : currentHealth.tone === "warn"
+                        ? "bg-amber-500"
+                        : currentHealth.tone === "error"
+                          ? "bg-rose-500"
+                          : "bg-slate-400"
+                  }`}
+                >
+                  ●
+                </span>
+                <div>
+                  <div className="text-sm font-bold text-slate-700">{currentHealth.description}</div>
+                  <div className="text-xs text-slate-400">{detail?.health?.checked_at ? toLocale(detail.health.checked_at) : "---"}</div>
+                </div>
+              </div>
+              <div className="space-y-2 border-t border-slate-100 pt-3 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-400">ヘルスチェック対象URL</span>
+                  <span className="font-mono font-semibold text-slate-700">{detail?.health?.url ?? "---"}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-400">HTTP ステータス</span>
+                  <span className="font-mono font-semibold text-slate-700">{detail?.health?.http_status ?? "---"}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-400">レスポンス時間</span>
+                  <span className="font-mono font-semibold text-slate-700">
+                    {detail?.health?.response_time_ms ? `${detail.health.response_time_ms}ms` : "---"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+            {panelTitle("コンテナ一覧")}
+            <div className="mt-4 space-y-3">
+              {(detail?.containers ?? []).length === 0 ? <p className="text-sm text-slate-400">{detailLoading ? "読み込み中..." : "コンテナ情報はありません。"}</p> : null}
+              {(detail?.containers ?? []).map((container) => (
+                <div key={container.container_id} className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-bold text-slate-800">{container.service_name}</span>
+                    <span className="text-xs font-semibold text-slate-400">{container.health_state}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">{container.runtime_name}</p>
+                  <p className="mt-2 text-xs text-slate-500">restart: {container.restart_count} / last seen: {toLocale(container.last_seen_at)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+            {panelTitle("最近のイベント")}
+            <div className="mt-4 space-y-3">
+              {recentEvents.length === 0 ? <p className="text-sm text-slate-400">イベントはまだありません。</p> : null}
+              {recentEvents.slice(0, 8).map((event) => (
+                <div key={event.event_id} className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-bold text-slate-800">{event.title}</span>
+                    <span className="text-xs text-slate-400">{toLocale(event.created_at)}</span>
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{event.message}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+            {panelTitle("削除")}
+            <p className="mt-3 text-sm text-slate-500">破壊的操作です。削除範囲とアプリ名を確認して実行します。</p>
+            <div className="mt-4 space-y-3">
+              <select
+                value={deleteMode}
+                onChange={(event) => onDeleteModeChange(event.target.value as DeleteMode)}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none"
+              >
+                <option value="config_only">構成のみ削除</option>
+                <option value="source_and_config">構成 + ソース削除</option>
+                <option value="full">構成 + ソース + データ削除</option>
+              </select>
+              <input
+                type="text"
+                placeholder={currentApplication.name}
+                value={deleteConfirmText}
+                onChange={(event) => onDeleteConfirmChange(event.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:border-red-400"
+              />
+              <button
+                type="button"
+                onClick={onDeleteSubmit}
+                disabled={loading || Boolean(operationLockReason)}
+                className="w-full rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 disabled:opacity-50"
+              >
+                削除ジョブを開始
+              </button>
+            </div>
+          </div>
         </div>
-        {operationLockReason ? <p className="hint warning">{operationLockReason}</p> : null}
-        <div className="delete-actions">
-          <button type="button" className="button danger" onClick={onDeleteSubmit} disabled={loading || Boolean(operationLockReason)}>
-            削除ジョブを開始
-          </button>
-        </div>
-      </section>
+      </div>
 
       <ComposeInspectDialog
         open={inspectDialogOpen}

@@ -44,6 +44,7 @@ import type {
 } from "./types";
 import { ApplicationDetailView, type DetailLogState } from "./views/ApplicationDetailView";
 import { ApplicationsView } from "./views/ApplicationsView";
+import { EventsView } from "./views/EventsView";
 import { HomeView } from "./views/HomeView";
 import { ImportView, type ImportComposeState, type ImportFormState, type ImportResolveState } from "./views/ImportView";
 
@@ -960,7 +961,6 @@ export function App() {
   return (
     <DashboardShell
       activeView={activeView}
-      detailEnabled={selectedApplication !== null}
       selectedApplicationName={selectedApplication?.name ?? null}
       executionMode={system?.execution?.mode ?? null}
       system={system}
@@ -1000,6 +1000,7 @@ export function App() {
           jobs={jobs}
           events={events}
           onOpenApplications={() => setActiveView("apps")}
+          onOpenEvents={() => setActiveView("events")}
           onOpenDetail={(applicationId) => openDetail(applicationId)}
         />
       ) : null}
@@ -1009,8 +1010,11 @@ export function App() {
           applications={applications}
           selectedApplicationId={selectedApplicationId}
           onOpenDetail={(applicationId) => openDetail(applicationId)}
+          onOpenImport={() => setActiveView("import")}
         />
       ) : null}
+
+      {activeView === "events" ? <EventsView events={events} /> : null}
 
       {activeView === "import" ? (
         <ImportView
