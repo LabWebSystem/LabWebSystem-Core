@@ -95,6 +95,14 @@ export function applySchema(db: Database.Database): void {
       FOREIGN KEY(related_application_id) REFERENCES applications(application_id) ON DELETE SET NULL
     );
 
+    CREATE TABLE IF NOT EXISTS dashboard_layouts (
+      dashboard_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY(dashboard_id, user_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status);
     CREATE INDEX IF NOT EXISTS idx_system_events_created_at ON system_events(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_jobs_status_created_at ON jobs(status, created_at DESC);

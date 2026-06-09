@@ -331,3 +331,110 @@ export type UpdateDeploymentPayload = {
   keepVolumesOnRebuild: boolean;
   envOverrides: Record<string, string>;
 };
+
+export type DashboardBreakpoint = "lg" | "md" | "sm" | "xs";
+
+export type DashboardWidgetType =
+  | "status"
+  | "cpu"
+  | "memory"
+  | "disk"
+  | "network"
+  | "alert"
+  | "log"
+  | "chart"
+  | "applications"
+  | "jobs"
+  | "events";
+
+export type DashboardWidget = {
+  id: string;
+  type: DashboardWidgetType;
+  title: string;
+  page: number;
+  static?: boolean;
+  isDraggable?: boolean;
+  isResizable?: boolean;
+  config?: {
+    applicationId?: string | null;
+  };
+};
+
+export type DashboardLayoutItem = {
+  i: string;
+  page: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  minW?: number;
+  minH?: number;
+  maxW?: number;
+  maxH?: number;
+  static?: boolean;
+  isDraggable?: boolean;
+  isResizable?: boolean;
+};
+
+export type DashboardResponsiveLayouts = Record<DashboardBreakpoint, DashboardLayoutItem[]>;
+
+export type DashboardLayoutDocument = {
+  widgets: DashboardWidget[];
+  layouts: DashboardResponsiveLayouts;
+  currentPage: number;
+  pageCount: number;
+};
+
+export type DashboardLayoutResponse = {
+  dashboardId: string;
+  userId: string;
+  layout: DashboardLayoutDocument | null;
+  updatedAt: string | null;
+};
+
+export type DashboardMetrics = {
+  generatedAt: string;
+  cpu: {
+    usagePercent: number;
+    loadAverage1m: number;
+    loadAverage5m: number;
+    loadAverage15m: number;
+    coreCount: number;
+  };
+  memory: {
+    totalBytes: number;
+    freeBytes: number;
+    usedBytes: number;
+    usagePercent: number;
+  };
+  disk: {
+    path: string;
+    totalBytes: number;
+    freeBytes: number;
+    usedBytes: number;
+    usagePercent: number;
+  };
+  network: {
+    interfaceCount: number;
+    interfaces: Array<{
+      name: string;
+      family: string;
+      address: string;
+      mac: string;
+    }>;
+    primaryAddress: string | null;
+    dnsEnabled: boolean;
+    dnsBindHost: string;
+    dnsPort: number;
+    rootDomain: string;
+  };
+  alerts: Array<{
+    event_id: string;
+    scope: string;
+    application_id: string | null;
+    level: "warning" | "error";
+    title: string;
+    message: string;
+    created_at: string;
+  }>;
+};

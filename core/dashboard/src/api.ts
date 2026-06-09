@@ -2,6 +2,9 @@ import type {
   ApplicationComposeInspection,
   ApplicationDetail,
   ApplicationJob,
+  DashboardLayoutDocument,
+  DashboardLayoutResponse,
+  DashboardMetrics,
   ApplicationListItem,
   ApplicationLogsResponse,
   CreateApplicationResponse,
@@ -79,6 +82,36 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function fetchSystemStatus(): Promise<SystemStatus> {
   return requestJson<SystemStatus>("/api/system/status");
+}
+
+export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
+  return requestJson<DashboardMetrics>("/api/system/metrics");
+}
+
+export async function fetchDashboardLayout(
+  dashboardId = "operations-monitoring",
+  userId = "default"
+): Promise<DashboardLayoutResponse> {
+  const params = new URLSearchParams({
+    dashboardId,
+    userId
+  });
+  return requestJson<DashboardLayoutResponse>(`/api/system/dashboard-layout?${params.toString()}`);
+}
+
+export async function saveDashboardLayout(
+  layout: DashboardLayoutDocument,
+  dashboardId = "operations-monitoring",
+  userId = "default"
+): Promise<void> {
+  await requestJson("/api/system/dashboard-layout", {
+    method: "PUT",
+    body: JSON.stringify({
+      dashboardId,
+      userId,
+      layout
+    })
+  });
 }
 
 export async function fetchApplications(): Promise<ApplicationListItem[]> {
