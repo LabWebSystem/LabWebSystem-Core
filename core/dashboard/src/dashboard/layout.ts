@@ -7,7 +7,7 @@ import type {
   DashboardWidgetType
 } from "../types";
 import { BREAKPOINT_KEYS, COLS } from "./constants";
-import type { GridItemLayout, GridLayouts } from "./types";
+import type { GridItemLayout, GridLayouts, WidgetSizing } from "./types";
 import { WIDGET_ORDER, widgetLabel, widgetSizing } from "./widgetDefinitions";
 
 type LegacyDashboardWidget = {
@@ -53,6 +53,39 @@ function hasWidgetType(value: unknown): value is DashboardWidgetType {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function intersects(
+  left: Pick<DashboardLayoutItem, "x" | "y" | "w" | "h">,
+  right: Pick<DashboardLayoutItem, "x" | "y" | "w" | "h">
+): boolean {
+  return left.x < right.x + right.w && left.x + left.w > right.x && left.y < right.y + right.h && left.y + left.h > right.y;
+}
+
+function findAvailablePosition(
+  items: Array<Pick<DashboardLayoutItem, "x" | "y" | "w" | "h">>,
+  breakpoint: DashboardBreakpoint,
+  size: WidgetSizing,
+  maxRows: number
+): { x: number; y: number } | null {
+  const cols = COLS[breakpoint];
+  const maxX = cols - size.w;
+  const maxY = maxRows - size.h;
+
+  if (maxX < 0 || maxY < 0) {
+    return null;
+  }
+
+  for (let y = 0; y <= maxY; y += 1) {
+    for (let x = 0; x <= maxX; x += 1) {
+      const candidate = { x, y, w: size.w, h: size.h };
+      if (!items.some((item) => intersects(candidate, item))) {
+        return { x, y };
+      }
+    }
+  }
+
+  return null;
 }
 
 function toPositiveInteger(value: unknown, fallback: number): number {
@@ -185,6 +218,29 @@ export function layoutPreset(widget: DashboardWidget, breakpoint: DashboardBreak
     isDraggable: widget.isDraggable,
     isResizable: widget.isResizable
   };
+}
+
+export function findPlacementForWidget(
+  layouts: DashboardResponsiveLayouts,
+  pageId: string,
+  type: DashboardWidgetType,
+  maxRows: number
+): Record<DashboardBreakpoint, { x: number; y: number }> | null {
+  const placement = {} as Record<DashboardBreakpoint, { x: number; y: number }>;
+
+  for (const breakpoint of BREAKPOINT_KEYS) {
+    const size = widgetSizing(type, breakpoint);
+    const pageItems = layouts[breakpoint].filter((item) => item.pageId === pageId);
+    const position = findAvailablePosition(pageItems, breakpoint, size, maxRows);
+
+    if (!position) {
+      return null;
+    }
+
+    placement[breakpoint] = position;
+  }
+
+  return placement;
 }
 
 function autoPlacePageWidgets(widgets: DashboardWidget[], breakpoint: DashboardBreakpoint): DashboardLayoutItem[] {

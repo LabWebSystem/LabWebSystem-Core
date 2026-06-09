@@ -72,6 +72,16 @@ export function HomeView(props: HomeViewProps) {
     endWidgetDrag
   } = useDashboardWorkspace();
 
+  useEffect(() => {
+    if (editMode) {
+      return;
+    }
+
+    clearDragEdgeNavigation();
+    setIsLayoutInteracting(false);
+    endWidgetDrag();
+  }, [editMode]);
+
   function clearDragEdgeNavigation() {
     dragEdgeDirectionRef.current = null;
     if (dragEdgeTimerRef.current) {
@@ -250,6 +260,14 @@ export function HomeView(props: HomeViewProps) {
                   ? currentLayouts
                   : toRglLayouts(dashboard, page.id)
                 : { lg: [], md: [], sm: [], xs: [] };
+              const interactivePageLayouts = editMode
+                ? pageLayouts
+                : {
+                    lg: pageLayouts.lg.map((item) => ({ ...item, static: true, isDraggable: false, isResizable: false })),
+                    md: pageLayouts.md.map((item) => ({ ...item, static: true, isDraggable: false, isResizable: false })),
+                    sm: pageLayouts.sm.map((item) => ({ ...item, static: true, isDraggable: false, isResizable: false })),
+                    xs: pageLayouts.xs.map((item) => ({ ...item, static: true, isDraggable: false, isResizable: false }))
+                  };
               const pageWidgets = dashboard?.widgets.filter((widget) => widget.pageId === page.id) ?? [];
 
               return (
@@ -263,6 +281,7 @@ export function HomeView(props: HomeViewProps) {
                     {dashboard ? (
                       <>
                         <ResponsiveGridLayout
+                          key={`${page.id}-${editMode ? "edit" : "view"}`}
                           className="layout h-full"
                           breakpoints={BREAKPOINTS}
                           cols={COLS}
@@ -270,17 +289,17 @@ export function HomeView(props: HomeViewProps) {
                           margin={GRID_MARGIN}
                           containerPadding={CONTAINER_PADDING}
                           maxRows={maxRows}
-                          layouts={pageLayouts}
+                          layouts={interactivePageLayouts}
                           isDraggable={editMode}
                           isResizable={editMode}
-                          draggableHandle=".widget-drag-handle"
+                          draggableHandle={editMode ? ".widget-drag-handle" : undefined}
                           preventCollision={false}
                           allowOverlap={false}
                           compactType="vertical"
-                          resizeHandles={["se"]}
+                          resizeHandles={editMode ? ["se"] : []}
                           onBreakpointChange={(nextBreakpoint: string) => setBreakpoint(nextBreakpoint as typeof breakpoint)}
                           onLayoutChange={(_: unknown, nextLayouts: unknown) => {
-                            if (page.id !== currentPage?.id) {
+                            if (!editMode || page.id !== currentPage?.id) {
                               return;
                             }
                             updateLayouts(nextLayouts as typeof currentLayouts);
@@ -380,7 +399,7 @@ export function HomeView(props: HomeViewProps) {
         <WidgetPickerModal
           breakpoint={breakpoint}
           onClose={() => setWidgetPickerOpen(false)}
-          onSelect={(type) => addWidget(type)}
+          onSelect={(type) => addWidget(type, maxRows)}
         />
       ) : null}
     </div>

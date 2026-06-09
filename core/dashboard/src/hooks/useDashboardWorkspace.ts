@@ -10,6 +10,7 @@ import {
 import {
   buildDefaultDashboardLayout,
   cloneResponsiveLayouts,
+  findPlacementForWidget,
   layoutPreset,
   mergeLayoutsForPage,
   normalizeDashboardLayout,
@@ -244,26 +245,60 @@ export function useDashboardWorkspace() {
     });
   }
 
-  function addWidget(type: DashboardWidgetType) {
+  function addWidget(type: DashboardWidgetType, maxRows: number) {
     setDashboard((previous) => {
       if (!previous) {
         return previous;
       }
 
-      const targetPageId = previous.currentPageId;
+      const currentIndex = previous.pages.findIndex((page) => page.id === previous.currentPageId);
+      const pageSearchStart = currentIndex >= 0 ? currentIndex : 0;
+      let pages = previous.pages;
+      let targetPageId: string | null = null;
+      let placement = null as ReturnType<typeof findPlacementForWidget>;
+
+      for (let index = pageSearchStart; index < pages.length; index += 1) {
+        const candidatePage = pages[index];
+        if (!candidatePage) {
+          continue;
+        }
+
+        const candidatePlacement = findPlacementForWidget(previous.layouts, candidatePage.id, type, maxRows);
+        if (candidatePlacement) {
+          targetPageId = candidatePage.id;
+          placement = candidatePlacement;
+          break;
+        }
+      }
+
+      if (!targetPageId) {
+        const nextPage = createPage(pages.length);
+        pages = renumberPages([...pages, nextPage]);
+        placement = findPlacementForWidget(previous.layouts, nextPage.id, type, maxRows);
+        targetPageId = nextPage.id;
+      }
+
+      if (!targetPageId || !placement) {
+        window.alert("現在の表示サイズでは、このウィジェットを配置できません。");
+        return previous;
+      }
+
       const widget = widgetPreset(type, targetPageId);
       const nextLayouts = cloneResponsiveLayouts(previous.layouts);
 
       for (const breakpointKey of BREAKPOINT_KEYS) {
-        const pageItems = nextLayouts[breakpointKey].filter((item) => item.pageId === targetPageId);
-        const bottomY = pageItems.reduce((max, item) => Math.max(max, item.y + item.h), 0);
-        nextLayouts[breakpointKey].push(layoutPreset(widget, breakpointKey, bottomY));
+        const layoutItem = layoutPreset(widget, breakpointKey, placement[breakpointKey].y);
+        layoutItem.x = placement[breakpointKey].x;
+        layoutItem.y = placement[breakpointKey].y;
+        nextLayouts[breakpointKey].push(layoutItem);
       }
 
       return {
         ...previous,
+        pages,
         widgets: [...previous.widgets, widget],
-        layouts: nextLayouts
+        layouts: nextLayouts,
+        currentPageId: targetPageId
       };
     });
     setWidgetPickerOpen(false);
