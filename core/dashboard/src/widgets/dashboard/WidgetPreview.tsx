@@ -29,10 +29,10 @@ export function WidgetPreview(props: { type: DashboardWidgetType }) {
       return (
         <div className="grid h-full grid-cols-2 gap-2">
           {[
-            ["Apps", "12"],
-            ["Healthy", "10"],
-            ["Queue", "3"],
-            ["Pages", "4"]
+            ["アプリ", "12"],
+            ["正常", "10"],
+            ["ジョブ", "3"],
+            ["ページ", "4"]
           ].map(([label, value], index) => (
             <div
               key={label}

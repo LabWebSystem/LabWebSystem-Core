@@ -361,15 +361,16 @@ export function normalizeDashboardLayout(document: unknown): DashboardLayoutDocu
           if (!hasWidgetType(widget.type)) {
             return [];
           }
+          const interactiveByDefault = widget.type === "status";
           return [
             {
               id: hasString(widget.id) ? widget.id : makeWidgetId(widget.type),
               type: widget.type,
               title: hasString(widget.title) ? widget.title : widgetLabel(widget.type),
               pageId: normalizePageId(widget.pageId ?? widget.page),
-              static: typeof widget.static === "boolean" ? widget.static : false,
-              isDraggable: typeof widget.isDraggable === "boolean" ? widget.isDraggable : true,
-              isResizable: typeof widget.isResizable === "boolean" ? widget.isResizable : true,
+              static: interactiveByDefault ? false : (typeof widget.static === "boolean" ? widget.static : false),
+              isDraggable: interactiveByDefault ? true : (typeof widget.isDraggable === "boolean" ? widget.isDraggable : true),
+              isResizable: interactiveByDefault ? true : (typeof widget.isResizable === "boolean" ? widget.isResizable : true),
               config: isRecord(widget.config) ? widget.config : undefined
             } satisfies DashboardWidget
           ];
@@ -397,6 +398,7 @@ export function normalizeDashboardLayout(document: unknown): DashboardLayoutDocu
         }
 
         const size = widgetSizing(widget.type, breakpoint);
+        const interactiveByDefault = widget.type === "status";
         const w = Math.min(COLS[breakpoint], Math.max(size.minW, toPositiveInteger(item.w, size.w)));
         const h = Math.max(size.minH, toPositiveInteger(item.h, size.h));
         const minW = Math.min(COLS[breakpoint], Math.max(1, toPositiveInteger(item.minW, size.minW)));
@@ -416,9 +418,9 @@ export function normalizeDashboardLayout(document: unknown): DashboardLayoutDocu
             minH,
             maxW,
             maxH,
-            static: typeof item.static === "boolean" ? item.static : widget.static,
-            isDraggable: typeof item.isDraggable === "boolean" ? item.isDraggable : widget.isDraggable,
-            isResizable: typeof item.isResizable === "boolean" ? item.isResizable : widget.isResizable
+            static: interactiveByDefault ? false : (typeof item.static === "boolean" ? item.static : widget.static),
+            isDraggable: interactiveByDefault ? true : (typeof item.isDraggable === "boolean" ? item.isDraggable : widget.isDraggable),
+            isResizable: interactiveByDefault ? true : (typeof item.isResizable === "boolean" ? item.isResizable : widget.isResizable)
           } satisfies DashboardLayoutItem
         ];
       });

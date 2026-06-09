@@ -18,32 +18,32 @@ export function StatusWidget(props: StatusWidgetProps) {
 
   const summaryCards = [
     {
-      label: "Apps",
+      label: "アプリ",
       value: system?.applicationSummary.total ?? applications.length,
       tone: "border-slate-200 bg-slate-50",
       textTone: "text-slate-900",
       meta: `登録 ${applications.length}`
     },
     {
-      label: "Healthy",
+      label: "正常",
       value: applications.filter((application) => application.health?.severity === "ok").length,
       tone: "border-emerald-200 bg-emerald-50",
       textTone: "text-emerald-900",
       meta: "安定稼働"
     },
     {
-      label: "Queue",
+      label: "ジョブ",
       value: jobs.filter((job) => job.status !== "succeeded").length,
       tone: "border-amber-200 bg-amber-50",
       textTone: "text-amber-900",
       meta: "待機・要確認"
     },
     {
-      label: "Pages",
+      label: "ページ",
       value: dashboardPageCount,
       tone: "border-violet-200 bg-violet-50",
       textTone: "text-violet-900",
-      meta: `widgets ${dashboardWidgetCount}`
+      meta: `ウィジェット ${dashboardWidgetCount}`
     }
   ];
 
@@ -61,13 +61,13 @@ export function StatusWidget(props: StatusWidgetProps) {
       {mode === "detail" ? (
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            実行モード: <span className="font-semibold text-slate-900">{system?.execution?.mode ?? "unknown"}</span>
+            実行モード: <span className="font-semibold text-slate-900">{system?.execution?.mode ?? "不明"}</span>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            DNS: <span className="font-semibold text-slate-900">{metrics?.network.dnsEnabled ? "enabled" : "disabled"}</span>
+            DNS: <span className="font-semibold text-slate-900">{metrics?.network.dnsEnabled ? "有効" : "無効"}</span>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            Root Domain: <span className="font-mono text-slate-900">{metrics?.network.rootDomain ?? "--"}</span>
+            ルートドメイン: <span className="font-mono text-slate-900">{metrics?.network.rootDomain ?? "--"}</span>
           </div>
         </div>
       ) : null}

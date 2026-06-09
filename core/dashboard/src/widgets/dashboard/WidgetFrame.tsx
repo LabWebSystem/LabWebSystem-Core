@@ -20,7 +20,7 @@ export function WidgetFrame(props: WidgetFrameProps) {
         </div>
 
         <div className="flex items-center gap-1">
-          {editMode && !widget.static ? (
+          {editMode ? (
             <button
               type="button"
               className="rounded-full border border-slate-200 p-2 text-xs text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
