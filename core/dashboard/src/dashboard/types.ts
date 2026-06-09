@@ -15,8 +15,6 @@ export type GridLayouts = Record<DashboardBreakpoint, GridItemLayout[]>;
 
 export type WidgetVisualMode = "compact" | "standard" | "detail";
 
-export type WidgetPickerTarget = "current" | "new-page";
-
 export type SaveState = "idle" | "saving" | "saved" | "error";
 
 export type WidgetSizing = {
@@ -60,7 +58,6 @@ export type DashboardWidgetFrameProps = {
   totalPages: number;
   breakpoint: DashboardBreakpoint;
   onDelete: (widgetId: string) => void;
-  onMovePage: (widgetId: string, delta: -1 | 1) => void;
 };
 
 export type DashboardWidgetRendererSharedProps = {

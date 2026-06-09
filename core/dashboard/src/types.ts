@@ -350,6 +350,7 @@ export type DashboardWidgetType =
 export type DashboardPage = {
   id: string;
   title: string;
+  isDraft?: boolean;
 };
 
 export type DashboardWidget = {

@@ -1,19 +1,15 @@
 import { WidgetPreviewCard } from "../widgets/dashboard/WidgetPreviewCard";
-import { WIDGET_ORDER, pageBadgeLabel } from "../dashboard/widgetDefinitions";
-import type { WidgetPickerTarget } from "../dashboard/types";
+import { WIDGET_ORDER } from "../dashboard/widgetDefinitions";
 import type { DashboardBreakpoint, DashboardWidgetType } from "../types";
 
 type WidgetPickerModalProps = {
   breakpoint: DashboardBreakpoint;
-  currentPageIndex: number;
-  target: WidgetPickerTarget;
-  onTargetChange: (target: WidgetPickerTarget) => void;
   onClose: () => void;
   onSelect: (type: DashboardWidgetType) => void;
 };
 
 export function WidgetPickerModal(props: WidgetPickerModalProps) {
-  const { breakpoint, currentPageIndex, target, onTargetChange, onClose, onSelect } = props;
+  const { breakpoint, onClose, onSelect } = props;
 
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/40 p-6 backdrop-blur-sm">
@@ -33,34 +29,13 @@ export function WidgetPickerModal(props: WidgetPickerModalProps) {
           </button>
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => onTargetChange("current")}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-              target === "current" ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            現在の {pageBadgeLabel(currentPageIndex)} に追加
-          </button>
-          <button
-            type="button"
-            onClick={() => onTargetChange("new-page")}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-              target === "new-page" ? "bg-violet-600 text-white" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            新しいページを作成して追加
-          </button>
-        </div>
-
         <div className="mt-6 grid gap-4 xl:grid-cols-2">
           {WIDGET_ORDER.map((type) => (
             <WidgetPreviewCard
               key={type}
               type={type}
               breakpoint={breakpoint}
-              targetLabel={target === "current" ? `${pageBadgeLabel(currentPageIndex)} に追加` : "新しいページに追加"}
+              targetLabel="現在のページに追加"
               onSelect={onSelect}
             />
           ))}

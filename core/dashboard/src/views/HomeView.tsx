@@ -13,7 +13,6 @@ import {
 } from "../dashboard/constants";
 import { findDisplayLayout, toRglLayouts } from "../dashboard/layout";
 import { canScrollInside, findScrollableAncestor } from "../dashboard/utils";
-import { pageBadgeLabel } from "../dashboard/widgetDefinitions";
 import { useDashboardLogWidget } from "../hooks/useDashboardLogWidget";
 import { useDashboardMetrics } from "../hooks/useDashboardMetrics";
 import { useDashboardWorkspace } from "../hooks/useDashboardWorkspace";
@@ -21,6 +20,9 @@ import type { ApplicationJob, ApplicationListItem, SystemEvent, SystemStatus } f
 import { DashboardWidgetRenderer } from "../widgets/dashboard/DashboardWidgetRenderer";
 
 const ResponsiveGridLayout = WidthProvider(Responsive as any) as any;
+const PAGE_EDGE_THRESHOLD_PX = 96;
+const PAGE_EDGE_INITIAL_DELAY_MS = 420;
+const PAGE_EDGE_REPEAT_MS = 520;
 
 type HomeViewProps = {
   system: SystemStatus | null;
@@ -36,6 +38,9 @@ export function HomeView(props: HomeViewProps) {
   const { system, applications, jobs, events, onOpenApplications, onOpenEvents, onOpenDetail } = props;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const touchScrollLockRef = useRef(false);
+  const dragEdgeDirectionRef = useRef<-1 | 1 | null>(null);
+  const dragEdgeTimerRef = useRef<number | null>(null);
+  const dragEdgeIntervalRef = useRef<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
 
   const { metrics, metricsHistory } = useDashboardMetrics();
@@ -47,8 +52,6 @@ export function HomeView(props: HomeViewProps) {
     setEditMode,
     widgetPickerOpen,
     setWidgetPickerOpen,
-    widgetPickerTarget,
-    setWidgetPickerTarget,
     breakpoint,
     setBreakpoint,
     isLayoutInteracting,
@@ -59,12 +62,64 @@ export function HomeView(props: HomeViewProps) {
     currentLayouts,
     changePage,
     updateLayouts,
-    addPage,
-    removeCurrentPage,
     addWidget,
     deleteWidget,
-    moveWidgetPage
+    beginWidgetDrag,
+    shiftDraggingWidgetPage,
+    endWidgetDrag
   } = useDashboardWorkspace();
+
+  function clearDragEdgeNavigation() {
+    dragEdgeDirectionRef.current = null;
+    if (dragEdgeTimerRef.current) {
+      window.clearTimeout(dragEdgeTimerRef.current);
+      dragEdgeTimerRef.current = null;
+    }
+    if (dragEdgeIntervalRef.current) {
+      window.clearInterval(dragEdgeIntervalRef.current);
+      dragEdgeIntervalRef.current = null;
+    }
+  }
+
+  function startDragEdgeNavigation(direction: -1 | 1) {
+    if (dragEdgeDirectionRef.current === direction) {
+      return;
+    }
+
+    clearDragEdgeNavigation();
+    dragEdgeDirectionRef.current = direction;
+    dragEdgeTimerRef.current = window.setTimeout(() => {
+      shiftDraggingWidgetPage(direction);
+      dragEdgeIntervalRef.current = window.setInterval(() => {
+        shiftDraggingWidgetPage(direction);
+      }, PAGE_EDGE_REPEAT_MS);
+    }, PAGE_EDGE_INITIAL_DELAY_MS);
+  }
+
+  function handleGridDrag(event: unknown) {
+    if (!editMode || !(event instanceof MouseEvent)) {
+      clearDragEdgeNavigation();
+      return;
+    }
+
+    const boundary = rootRef.current?.getBoundingClientRect();
+    if (!boundary) {
+      clearDragEdgeNavigation();
+      return;
+    }
+
+    const offsetY = event.clientY - boundary.top;
+    if (offsetY <= PAGE_EDGE_THRESHOLD_PX) {
+      startDragEdgeNavigation(-1);
+      return;
+    }
+    if (offsetY >= boundary.height - PAGE_EDGE_THRESHOLD_PX) {
+      startDragEdgeNavigation(1);
+      return;
+    }
+
+    clearDragEdgeNavigation();
+  }
 
   function handleWheel(event: React.WheelEvent<HTMLDivElement>) {
     if (!dashboard || isLayoutInteracting || isPageAnimating || Math.abs(event.deltaY) < 24) {
@@ -115,14 +170,7 @@ export function HomeView(props: HomeViewProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.12),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.10),transparent_20%),linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 bg-white/80 px-5 py-4 backdrop-blur">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-slate-400">Monitoring Dashboard</p>
-          <h2 className="mt-1 text-lg font-bold text-slate-900">固定トピックに縛られない、可変ページ型の監視ワークスペース</h2>
-          <p className="mt-1 text-sm text-slate-500">ページは必要な分だけ増やせて、各ウィジェットは最小サイズとサイズ別表示を持ちます。</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center justify-end gap-2 border-b border-slate-200/80 bg-white/80 px-5 py-3 backdrop-blur">
           <span
             className={`rounded-full px-3 py-1 text-xs font-semibold ${
               saveState === "error"
@@ -136,13 +184,6 @@ export function HomeView(props: HomeViewProps) {
           </span>
           <button
             type="button"
-            onClick={addPage}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            ページ追加
-          </button>
-          <button
-            type="button"
             onClick={() => setEditMode((previous) => !previous)}
             className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
               editMode ? "bg-slate-900 text-white hover:bg-slate-800" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
@@ -153,7 +194,6 @@ export function HomeView(props: HomeViewProps) {
           <button
             type="button"
             onClick={() => {
-              setWidgetPickerTarget("current");
               setWidgetPickerOpen(true);
             }}
             className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700"
@@ -161,7 +201,6 @@ export function HomeView(props: HomeViewProps) {
             <FaPlus />
             ウィジェット追加
           </button>
-        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -187,31 +226,12 @@ export function HomeView(props: HomeViewProps) {
               const pageWidgets = dashboard?.widgets.filter((widget) => widget.pageId === page.id) ?? [];
 
               return (
-                <section key={page.id} className="h-full min-h-0 shrink-0 p-5">
-                  <div className="mb-4 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-slate-400">{pageBadgeLabel(pageIndex)}</p>
-                      <h3 className="mt-1 text-lg font-bold text-slate-900">{page.title}</h3>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {pageWidgets.length} widgets · {COLS[breakpoint]} cols · min-size aware
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                      <span>12px gap</span>
-                      <span>drag / resize enabled</span>
-                      {page.id === currentPage?.id && editMode && pageWidgets.length === 0 && (dashboard?.pages.length ?? 0) > 1 ? (
-                        <button
-                          type="button"
-                          onClick={removeCurrentPage}
-                          className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 font-semibold text-rose-700 transition hover:bg-rose-100"
-                        >
-                          空ページ削除
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="relative h-[calc(100%-4rem)] min-h-0 rounded-[1.8rem] border border-white/80 bg-white/65 shadow-[0_26px_80px_-60px_rgba(15,23,42,0.6)] backdrop-blur">
+                <section key={page.id} className="h-full min-h-0 shrink-0 p-4">
+                  <div
+                    className={`relative h-full min-h-0 rounded-[1.8rem] border border-white/80 shadow-[0_26px_80px_-60px_rgba(15,23,42,0.6)] backdrop-blur transition ${
+                      page.isDraft ? "bg-white/35 opacity-70" : "bg-white/65"
+                    }`}
+                  >
                     {dashboard ? (
                       <>
                         <ResponsiveGridLayout
@@ -236,8 +256,20 @@ export function HomeView(props: HomeViewProps) {
                             }
                             updateLayouts(nextLayouts as typeof currentLayouts);
                           }}
-                          onDragStart={() => setIsLayoutInteracting(true)}
-                          onDragStop={() => setIsLayoutInteracting(false)}
+                          onDragStart={(_: unknown, __: unknown, item: { i?: string }) => {
+                            setIsLayoutInteracting(true);
+                            if (item?.i) {
+                              beginWidgetDrag(item.i);
+                            }
+                          }}
+                          onDrag={(_: unknown, __: unknown, ___: unknown, ____: unknown, event: unknown) => {
+                            handleGridDrag(event);
+                          }}
+                          onDragStop={() => {
+                            clearDragEdgeNavigation();
+                            setIsLayoutInteracting(false);
+                            endWidgetDrag();
+                          }}
                           onResizeStart={() => setIsLayoutInteracting(true)}
                           onResizeStop={() => setIsLayoutInteracting(false)}
                         >
@@ -251,7 +283,6 @@ export function HomeView(props: HomeViewProps) {
                                 breakpoint={breakpoint}
                                 editMode={editMode}
                                 onDelete={deleteWidget}
-                                onMovePage={moveWidgetPage}
                                 system={system}
                                 applications={applications}
                                 jobs={jobs}
@@ -275,9 +306,10 @@ export function HomeView(props: HomeViewProps) {
                         {pageWidgets.length === 0 ? (
                           <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
                             <div className="max-w-md rounded-[1.6rem] border border-dashed border-slate-300 bg-white/90 px-6 py-8 text-center shadow-sm">
-                              <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-slate-400">{pageBadgeLabel(pageIndex)}</p>
-                              <h4 className="mt-2 text-lg font-bold text-slate-900">このページはまだ空です</h4>
-                              <p className="mt-2 text-sm text-slate-500">必要なウィジェットを追加するか、新しいページへそのまま拡張してください。</p>
+                              <h4 className="text-lg font-bold text-slate-900">{page.isDraft ? "ここにドロップすると新しいページを確定します" : "このページはまだ空です"}</h4>
+                              {page.isDraft ? (
+                                <p className="mt-2 text-sm text-slate-500">末尾でさらに下へドラッグしたときだけ一時的に作られるドラフトページです。</p>
+                              ) : null}
                             </div>
                           </div>
                         ) : null}
@@ -291,14 +323,6 @@ export function HomeView(props: HomeViewProps) {
         </div>
 
         <aside className="hidden w-24 shrink-0 flex-col items-center justify-center gap-3 pr-4 lg:flex">
-          <button
-            type="button"
-            onClick={addPage}
-            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
-            title="ページ追加"
-          >
-            <FaPlus />
-          </button>
           {(dashboard?.pages ?? []).map((page, pageIndex) => (
             <button
               key={page.id}
@@ -308,10 +332,16 @@ export function HomeView(props: HomeViewProps) {
             >
               <span
                 className={`h-2.5 w-2.5 rounded-full ${
-                  pageIndex === currentPageIndex ? "bg-violet-600" : "bg-slate-300 group-hover:bg-slate-400"
+                  pageIndex === currentPageIndex
+                    ? page.isDraft
+                      ? "bg-violet-300"
+                      : "bg-violet-600"
+                    : page.isDraft
+                      ? "bg-slate-200"
+                      : "bg-slate-300 group-hover:bg-slate-400"
                 }`}
               />
-              <span className="text-xs font-semibold">{pageIndex + 1}</span>
+              <span className="text-xs font-semibold">{page.isDraft ? "+" : pageIndex + 1}</span>
             </button>
           ))}
         </aside>
@@ -320,11 +350,8 @@ export function HomeView(props: HomeViewProps) {
       {widgetPickerOpen ? (
         <WidgetPickerModal
           breakpoint={breakpoint}
-          currentPageIndex={currentPageIndex}
-          target={widgetPickerTarget}
-          onTargetChange={setWidgetPickerTarget}
           onClose={() => setWidgetPickerOpen(false)}
-          onSelect={(type) => addWidget(type, widgetPickerTarget)}
+          onSelect={(type) => addWidget(type)}
         />
       ) : null}
     </div>

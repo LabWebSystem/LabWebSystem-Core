@@ -77,14 +77,16 @@ function makeWidgetId(type: DashboardWidgetType): string {
 function createPage(index: number) {
   return {
     id: makePageId(),
-    title: dashboardPageTitle(index)
+    title: dashboardPageTitle(index),
+    isDraft: false
   };
 }
 
-export function renumberPages(pages: Array<{ id: string; title: string }>) {
+export function renumberPages(pages: Array<{ id: string; title: string; isDraft?: boolean }>) {
   return pages.map((page, index) => ({
     ...page,
-    title: dashboardPageTitle(index)
+    title: dashboardPageTitle(index),
+    isDraft: page.isDraft ?? false
   }));
 }
 
@@ -299,7 +301,8 @@ export function normalizeDashboardLayout(document: unknown): DashboardLayoutDocu
         .filter(isRecord)
         .map((page, index) => ({
           id: hasString(page.id) ? page.id : makePageId(),
-          title: hasString(page.title) ? page.title : dashboardPageTitle(index)
+          title: hasString(page.title) ? page.title : dashboardPageTitle(index),
+          isDraft: typeof page.isDraft === "boolean" ? page.isDraft : false
         }))
     : [];
 

@@ -22,7 +22,6 @@ type DashboardWidgetRendererProps = DashboardWidgetRendererSharedProps & {
   breakpoint: DashboardBreakpoint;
   editMode: boolean;
   onDelete: (widgetId: string) => void;
-  onMovePage: (widgetId: string, delta: -1 | 1) => void;
 };
 
 export function DashboardWidgetRenderer(props: DashboardWidgetRendererProps) {
@@ -34,7 +33,6 @@ export function DashboardWidgetRenderer(props: DashboardWidgetRendererProps) {
     breakpoint,
     editMode,
     onDelete,
-    onMovePage,
     system,
     applications,
     jobs,
@@ -60,8 +58,7 @@ export function DashboardWidgetRenderer(props: DashboardWidgetRendererProps) {
     pageIndex,
     totalPages,
     breakpoint,
-    onDelete,
-    onMovePage
+    onDelete
   } as const;
 
   switch (widget.type) {
