@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+
 import { Responsive, WidthProvider } from "react-grid-layout/legacy";
+
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
+
 import { FaPlus } from "react-icons/fa6";
+
 import { WidgetPickerModal } from "../components/WidgetPickerModal";
 import {
   BREAKPOINTS,
@@ -12,14 +16,19 @@ import {
   ROW_HEIGHT
 } from "../dashboard/constants";
 import { findDisplayLayout, toRglLayouts } from "../dashboard/layout";
+import type { GridItemLayout, GridLayouts } from "../dashboard/types";
 import { canScrollInside, findScrollableAncestor } from "../dashboard/utils";
+
 import { useDashboardLogWidget } from "../hooks/useDashboardLogWidget";
 import { useDashboardMetrics } from "../hooks/useDashboardMetrics";
 import { useDashboardWorkspace } from "../hooks/useDashboardWorkspace";
+
 import type { ApplicationJob, ApplicationListItem, SystemEvent, SystemStatus } from "../types";
+
 import { DashboardWidgetRenderer } from "../widgets/dashboard/DashboardWidgetRenderer";
 
 const ResponsiveGridLayout = WidthProvider(Responsive as any) as any;
+
 const PAGE_EDGE_THRESHOLD_PX = 96;
 const PAGE_EDGE_INITIAL_DELAY_MS = 420;
 const PAGE_EDGE_REPEAT_MS = 520;
@@ -35,6 +44,75 @@ type HomeViewProps = {
   onOpenDetail: (applicationId: string) => void;
 };
 
+function overlapsHorizontally(
+  a: Pick<GridItemLayout, "x" | "w">,
+  b: Pick<GridItemLayout, "x" | "w">
+): boolean {
+  return a.x < b.x + b.w && a.x + a.w > b.x;
+}
+
+function getMaxHeightBeforeCollision(
+  item: GridItemLayout,
+  layout: GridItemLayout[],
+  maxRows: number
+): number {
+  const nearestBottomBlockerY = layout
+    .filter((other) => other.i !== item.i)
+    .filter((other) => overlapsHorizontally(item, other))
+    .filter((other) => other.y >= item.y + item.h)
+    .reduce((nearestY, other) => Math.min(nearestY, other.y), maxRows);
+
+  const minHeight = item.minH ?? 1;
+  const maxHeightByGrid = Math.max(minHeight, maxRows - item.y);
+  const maxHeightByCollision = Math.max(minHeight, nearestBottomBlockerY - item.y);
+  const originalMaxHeight = item.maxH ?? maxHeightByGrid;
+
+  return Math.max(
+    minHeight,
+    Math.min(originalMaxHeight, maxHeightByGrid, maxHeightByCollision)
+  );
+}
+
+function applyResizeGuardsToLayout(
+  layout: GridItemLayout[],
+  maxRows: number
+): GridItemLayout[] {
+  return layout.map((item) => {
+    const maxH = getMaxHeightBeforeCollision(item, layout, maxRows);
+
+    return {
+      ...item,
+      maxH,
+      h: Math.min(item.h, maxH)
+    };
+  });
+}
+
+function applyResizeGuardsToLayouts(
+  layouts: GridLayouts,
+  maxRows: number
+): GridLayouts {
+  return {
+    lg: applyResizeGuardsToLayout(layouts.lg, maxRows),
+    md: applyResizeGuardsToLayout(layouts.md, maxRows),
+    sm: applyResizeGuardsToLayout(layouts.sm, maxRows),
+    xs: applyResizeGuardsToLayout(layouts.xs, maxRows)
+  };
+}
+
+function layoutFitsMaxRows(layout: GridItemLayout[], limit: number): boolean {
+  return layout.every((item) => item.y + item.h <= limit);
+}
+
+function layoutsFitMaxRows(layouts: GridLayouts, limit: number): boolean {
+  return (
+    layoutFitsMaxRows(layouts.lg, limit) &&
+    layoutFitsMaxRows(layouts.md, limit) &&
+    layoutFitsMaxRows(layouts.sm, limit) &&
+    layoutFitsMaxRows(layouts.xs, limit)
+  );
+}
+
 export function HomeView(props: HomeViewProps) {
   const { system, applications, jobs, events, onOpenApplications, onOpenEvents, onOpenDetail } = props;
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -48,6 +126,7 @@ export function HomeView(props: HomeViewProps) {
 
   const { metrics, metricsHistory } = useDashboardMetrics();
   const { logWidget, logSourceOptions, setApplicationId, setSelectedService } = useDashboardLogWidget(applications);
+
   const {
     dashboard,
     saveState,
@@ -84,10 +163,12 @@ export function HomeView(props: HomeViewProps) {
 
   function clearDragEdgeNavigation() {
     dragEdgeDirectionRef.current = null;
+
     if (dragEdgeTimerRef.current) {
       window.clearTimeout(dragEdgeTimerRef.current);
       dragEdgeTimerRef.current = null;
     }
+
     if (dragEdgeIntervalRef.current) {
       window.clearInterval(dragEdgeIntervalRef.current);
       dragEdgeIntervalRef.current = null;
@@ -101,8 +182,10 @@ export function HomeView(props: HomeViewProps) {
 
     clearDragEdgeNavigation();
     dragEdgeDirectionRef.current = direction;
+
     dragEdgeTimerRef.current = window.setTimeout(() => {
       shiftDraggingWidgetPage(direction);
+
       dragEdgeIntervalRef.current = window.setInterval(() => {
         shiftDraggingWidgetPage(direction);
       }, PAGE_EDGE_REPEAT_MS);
@@ -116,16 +199,19 @@ export function HomeView(props: HomeViewProps) {
     }
 
     const boundary = rootRef.current?.getBoundingClientRect();
+
     if (!boundary) {
       clearDragEdgeNavigation();
       return;
     }
 
     const offsetY = event.clientY - boundary.top;
+
     if (offsetY <= PAGE_EDGE_THRESHOLD_PX) {
       startDragEdgeNavigation(-1);
       return;
     }
+
     if (offsetY >= boundary.height - PAGE_EDGE_THRESHOLD_PX) {
       startDragEdgeNavigation(1);
       return;
@@ -140,6 +226,7 @@ export function HomeView(props: HomeViewProps) {
     }
 
     const scrollable = findScrollableAncestor(event.target, rootRef.current);
+
     if (scrollable && canScrollInside(scrollable, event.deltaY)) {
       return;
     }
@@ -161,6 +248,7 @@ export function HomeView(props: HomeViewProps) {
 
     const endY = event.changedTouches[0]?.clientY ?? touchStartY;
     const diff = touchStartY - endY;
+
     if (Math.abs(diff) < 48) {
       return;
     }
@@ -175,6 +263,7 @@ export function HomeView(props: HomeViewProps) {
       event.preventDefault();
       changePage(currentPageIndex + 1);
     }
+
     if (event.key === "ArrowUp" || event.key === "PageUp") {
       event.preventDefault();
       changePage(currentPageIndex - 1);
@@ -183,6 +272,7 @@ export function HomeView(props: HomeViewProps) {
 
   useEffect(() => {
     const element = currentGridFrameRef.current;
+
     if (!element) {
       return;
     }
@@ -190,6 +280,7 @@ export function HomeView(props: HomeViewProps) {
     const updateMaxRows = () => {
       const height = element.clientHeight;
       const nextRows = Math.max(1, Math.floor((height - GRID_VERTICAL_CHROME) / (ROW_HEIGHT + GRID_MARGIN[1])));
+
       setMaxRows(nextRows);
     };
 
@@ -198,6 +289,7 @@ export function HomeView(props: HomeViewProps) {
     const observer = new ResizeObserver(() => {
       updateMaxRows();
     });
+
     observer.observe(element);
 
     return () => {
@@ -208,36 +300,36 @@ export function HomeView(props: HomeViewProps) {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.12),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.10),transparent_20%),linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)]">
       <div className="flex items-center justify-end gap-2 border-b border-slate-200/80 bg-white/80 px-5 py-3 backdrop-blur">
-          <span
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              saveState === "error"
-                ? "bg-rose-100 text-rose-700"
-                : saveState === "saving"
-                  ? "bg-amber-100 text-amber-700"
-                  : "bg-emerald-100 text-emerald-700"
+        <span
+          className={`rounded-full px-3 py-1 text-xs font-semibold ${saveState === "error"
+              ? "bg-rose-100 text-rose-700"
+              : saveState === "saving"
+                ? "bg-amber-100 text-amber-700"
+                : "bg-emerald-100 text-emerald-700"
             }`}
-          >
-            {saveState === "saving" ? "レイアウト保存中" : saveState === "error" ? "保存失敗" : "保存済み"}
-          </span>
-          <button
-            type="button"
-            onClick={() => setEditMode((previous) => !previous)}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-              editMode ? "bg-slate-900 text-white hover:bg-slate-800" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+        >
+          {saveState === "saving" ? "レイアウト保存中" : saveState === "error" ? "保存失敗" : "保存済み"}
+        </span>
+
+        <button
+          type="button"
+          onClick={() => setEditMode((previous) => !previous)}
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${editMode ? "bg-slate-900 text-white hover:bg-slate-800" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
             }`}
-          >
-            {editMode ? "編集完了" : "レイアウト編集"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setWidgetPickerOpen(true);
-            }}
-            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700"
-          >
-            <FaPlus />
-            ウィジェット追加
-          </button>
+        >
+          {editMode ? "編集完了" : "レイアウト編集"}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setWidgetPickerOpen(true);
+          }}
+          className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700"
+        >
+          <FaPlus />
+          ウィジェット追加
+        </button>
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -255,57 +347,91 @@ export function HomeView(props: HomeViewProps) {
             style={{ transform: `translateY(-${currentPageIndex * 100}%)` }}
           >
             {(dashboard?.pages ?? []).map((page, pageIndex) => {
-              const pageLayouts = dashboard
+              const pageLayouts: GridLayouts = dashboard
                 ? page.id === currentPage?.id
                   ? currentLayouts
                   : toRglLayouts(dashboard, page.id)
                 : { lg: [], md: [], sm: [], xs: [] };
-              const interactivePageLayouts = editMode
-                ? pageLayouts
+
+              const guardedPageLayouts = applyResizeGuardsToLayouts(pageLayouts, maxRows);
+
+              const interactivePageLayouts: GridLayouts = editMode
+                ? guardedPageLayouts
                 : {
-                    lg: pageLayouts.lg.map((item) => ({ ...item, static: true, isDraggable: false, isResizable: false })),
-                    md: pageLayouts.md.map((item) => ({ ...item, static: true, isDraggable: false, isResizable: false })),
-                    sm: pageLayouts.sm.map((item) => ({ ...item, static: true, isDraggable: false, isResizable: false })),
-                    xs: pageLayouts.xs.map((item) => ({ ...item, static: true, isDraggable: false, isResizable: false }))
-                  };
+                  lg: guardedPageLayouts.lg.map((item) => ({
+                    ...item,
+                    static: true,
+                    isDraggable: false,
+                    isResizable: false
+                  })),
+                  md: guardedPageLayouts.md.map((item) => ({
+                    ...item,
+                    static: true,
+                    isDraggable: false,
+                    isResizable: false
+                  })),
+                  sm: guardedPageLayouts.sm.map((item) => ({
+                    ...item,
+                    static: true,
+                    isDraggable: false,
+                    isResizable: false
+                  })),
+                  xs: guardedPageLayouts.xs.map((item) => ({
+                    ...item,
+                    static: true,
+                    isDraggable: false,
+                    isResizable: false
+                  }))
+                };
+
               const pageWidgets = dashboard?.widgets.filter((widget) => widget.pageId === page.id) ?? [];
 
               return (
                 <section key={page.id} className="h-full min-h-0 shrink-0 p-4">
                   <div
                     ref={page.id === currentPage?.id ? currentGridFrameRef : null}
-                    className={`relative h-full min-h-0 rounded-[1.8rem] border border-white/80 shadow-[0_26px_80px_-60px_rgba(15,23,42,0.6)] backdrop-blur transition ${
-                      page.isDraft ? "bg-white/35 opacity-70" : "bg-white/65"
-                    }`}
+                    className={`relative h-full min-h-0 rounded-[1.8rem] border border-white/80 shadow-[0_26px_80px_-60px_rgba(15,23,42,0.6)] backdrop-blur transition ${page.isDraft ? "bg-white/35 opacity-70" : "bg-white/65"
+                      }`}
                   >
                     {dashboard ? (
                       <>
                         <ResponsiveGridLayout
                           key={`${page.id}-${editMode ? "edit" : "view"}`}
                           className="layout h-full"
+                          style={{ height: "100%" }}
                           breakpoints={BREAKPOINTS}
                           cols={COLS}
                           rowHeight={ROW_HEIGHT}
                           margin={GRID_MARGIN}
                           containerPadding={CONTAINER_PADDING}
                           maxRows={maxRows}
+                          autoSize={false}
                           layouts={interactivePageLayouts}
                           isDraggable={editMode}
                           isResizable={editMode}
                           draggableHandle={editMode ? ".widget-drag-handle" : undefined}
-                          preventCollision={false}
+                          preventCollision={true}
                           allowOverlap={false}
-                          compactType="vertical"
+                          compactType={null}
                           resizeHandles={editMode ? ["se"] : []}
+                          isBounded={true}
                           onBreakpointChange={(nextBreakpoint: string) => setBreakpoint(nextBreakpoint as typeof breakpoint)}
                           onLayoutChange={(_: unknown, nextLayouts: unknown) => {
                             if (!editMode || page.id !== currentPage?.id) {
                               return;
                             }
-                            updateLayouts(nextLayouts as typeof currentLayouts);
+
+                            const candidateLayouts = nextLayouts as GridLayouts;
+
+                            if (!layoutsFitMaxRows(candidateLayouts, maxRows)) {
+                              return;
+                            }
+
+                            updateLayouts(candidateLayouts);
                           }}
                           onDragStart={(_: unknown, __: unknown, item: { i?: string }) => {
                             setIsLayoutInteracting(true);
+
                             if (item?.i) {
                               beginWidgetDrag(item.i);
                             }
@@ -325,7 +451,7 @@ export function HomeView(props: HomeViewProps) {
                             <div key={widget.id} className="overflow-hidden">
                               <DashboardWidgetRenderer
                                 widget={widget}
-                                layout={findDisplayLayout(pageLayouts, breakpoint, widget.id)}
+                                layout={findDisplayLayout(guardedPageLayouts, breakpoint, widget.id)}
                                 pageIndex={pageIndex}
                                 totalPages={dashboard.pages.length}
                                 breakpoint={breakpoint}
@@ -354,9 +480,14 @@ export function HomeView(props: HomeViewProps) {
                         {pageWidgets.length === 0 ? (
                           <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
                             <div className="max-w-md rounded-[1.6rem] border border-dashed border-slate-300 bg-white/90 px-6 py-8 text-center shadow-sm">
-                              <h4 className="text-lg font-bold text-slate-900">{page.isDraft ? "ここにドロップすると新しいページを確定します" : "このページはまだ空です"}</h4>
+                              <h4 className="text-lg font-bold text-slate-900">
+                                {page.isDraft ? "ここにドロップすると新しいページを確定します" : "このページはまだ空です"}
+                              </h4>
+
                               {page.isDraft ? (
-                                <p className="mt-2 text-sm text-slate-500">末尾でさらに下へドラッグしたときだけ一時的に作られるドラフトページです。</p>
+                                <p className="mt-2 text-sm text-slate-500">
+                                  末尾でさらに下へドラッグしたときだけ一時的に作られるドラフトページです。
+                                </p>
                               ) : null}
                             </div>
                           </div>
@@ -379,16 +510,16 @@ export function HomeView(props: HomeViewProps) {
               className={`group flex items-center gap-3 ${pageIndex === currentPageIndex ? "text-slate-900" : "text-slate-400"}`}
             >
               <span
-                className={`h-2.5 w-2.5 rounded-full ${
-                  pageIndex === currentPageIndex
+                className={`h-2.5 w-2.5 rounded-full ${pageIndex === currentPageIndex
                     ? page.isDraft
                       ? "bg-violet-300"
                       : "bg-violet-600"
                     : page.isDraft
                       ? "bg-slate-200"
                       : "bg-slate-300 group-hover:bg-slate-400"
-                }`}
+                  }`}
               />
+
               <span className="text-xs font-semibold">{page.isDraft ? "+" : pageIndex + 1}</span>
             </button>
           ))}

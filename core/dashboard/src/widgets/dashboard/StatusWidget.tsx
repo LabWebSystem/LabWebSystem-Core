@@ -1,6 +1,7 @@
-import { WidgetFrame } from "./WidgetFrame";
 import type { DashboardWidgetFrameProps } from "../../dashboard/types";
 import type { ApplicationJob, ApplicationListItem, DashboardMetrics, SystemStatus } from "../../types";
+
+import { WidgetFrame } from "./WidgetFrame";
 
 type StatusWidgetProps = {
   frameProps: DashboardWidgetFrameProps;
@@ -10,22 +11,23 @@ type StatusWidgetProps = {
   metrics: DashboardMetrics | null;
 };
 
+type SummaryCard = {
+  label: string;
+  value: number;
+  tone: string;
+  textTone: string;
+  meta: string;
+};
+
 export function StatusWidget(props: StatusWidgetProps) {
   const { frameProps, system, applications, jobs, metrics } = props;
   const { mode } = frameProps;
+
   const alertingApplications = applications.filter(
     (application) => application.health?.severity === "critical" || Boolean(application.latest_error_title)
   ).length;
-  const cardPadding = mode === "compact" ? "p-3" : "p-4";
-  const labelClass = mode === "compact" ? "text-[10px]" : "text-xs";
-  const valueClass = mode === "detail" ? "text-4xl" : mode === "compact" ? "text-2xl" : "text-3xl";
-  const metaClass = mode === "compact" ? "text-xs" : "text-sm";
-  const gridClass =
-    mode === "detail"
-      ? "grid-cols-2 xl:grid-cols-4"
-      : "grid-cols-2";
 
-  const summaryCards = [
+  const summaryCards: SummaryCard[] = [
     {
       label: "アプリ",
       value: system?.applicationSummary.total ?? applications.length,
@@ -58,30 +60,72 @@ export function StatusWidget(props: StatusWidgetProps) {
 
   return (
     <WidgetFrame {...frameProps}>
-      <div className={`grid h-full auto-rows-fr gap-3 ${gridClass}`}>
-        {summaryCards.map((card) => (
-          <div key={card.label} className={`flex min-h-0 flex-col justify-between rounded-2xl border ${cardPadding} ${card.tone}`}>
-            <p className={`${labelClass} font-semibold uppercase tracking-[0.2em] text-slate-400`}>{card.label}</p>
-            <div className="mt-2 min-h-0">
-              <p className={`${valueClass} font-bold ${card.textTone}`}>{card.value}</p>
-              <p className={`mt-1 line-clamp-2 ${metaClass} ${card.label === "異常" ? "text-rose-700" : "text-slate-500"}`}>{card.meta}</p>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <div className="grid h-full min-h-0 min-w-0 grid-cols-[repeat(4,minmax(0,1fr))] grid-rows-1 gap-[clamp(0.25rem,0.8vw,0.75rem)] overflow-hidden">
+          {summaryCards.map((card) => (
+            <div
+              key={card.label}
+              className={`flex min-h-0 min-w-0 flex-col justify-between overflow-hidden rounded-2xl border ${card.tone}`}
+              style={{
+                padding: mode === "compact" ? "clamp(0.45rem, 1.1vw, 0.75rem)" : "clamp(0.5rem, 1.3vw, 1rem)"
+              }}
+            >
+              <p className="min-w-0 truncate text-[clamp(0.55rem,0.75vw,0.75rem)] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                {card.label}
+              </p>
+
+              <div className="mt-1 min-h-0 min-w-0">
+                <p
+                  className={`min-w-0 truncate font-bold leading-none ${card.textTone}`}
+                  style={{
+                    fontSize:
+                      mode === "detail"
+                        ? "clamp(1.4rem, 2.8vw, 2.25rem)"
+                        : mode === "compact"
+                          ? "clamp(1rem, 2.2vw, 1.5rem)"
+                          : "clamp(1.2rem, 2.5vw, 1.875rem)"
+                  }}
+                >
+                  {card.value}
+                </p>
+
+                <p
+                  className={`mt-1 min-w-0 truncate text-[clamp(0.55rem,0.85vw,0.875rem)] leading-tight ${card.label === "異常" ? "text-rose-700" : "text-slate-500"
+                    }`}
+                  title={card.meta}
+                >
+                  {card.meta}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {mode === "detail" ? (
+          <div className="mt-3 grid min-h-0 shrink-0 gap-3 sm:grid-cols-3">
+            <div className="truncate rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              実行モード:{" "}
+              <span className="font-semibold text-slate-900">
+                {system?.execution?.mode ?? "不明"}
+              </span>
+            </div>
+
+            <div className="truncate rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              DNS:{" "}
+              <span className="font-semibold text-slate-900">
+                {metrics?.network.dnsEnabled ? "有効" : "無効"}
+              </span>
+            </div>
+
+            <div className="truncate rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              ルートドメイン:{" "}
+              <span className="font-mono text-slate-900">
+                {metrics?.network.rootDomain ?? "--"}
+              </span>
             </div>
           </div>
-        ))}
+        ) : null}
       </div>
-      {mode === "detail" ? (
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            実行モード: <span className="font-semibold text-slate-900">{system?.execution?.mode ?? "不明"}</span>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            DNS: <span className="font-semibold text-slate-900">{metrics?.network.dnsEnabled ? "有効" : "無効"}</span>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            ルートドメイン: <span className="font-mono text-slate-900">{metrics?.network.rootDomain ?? "--"}</span>
-          </div>
-        </div>
-      ) : null}
     </WidgetFrame>
   );
 }
