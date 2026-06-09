@@ -23,6 +23,16 @@
 - ダッシュボードの見た目ルールは `docs/readmes/ダッシュボードUIデザインルール.md` を参照する
 - UI を追加・修正するときは、既存画面の骨格よりもこのルール文書を優先して整合性を確認する
 
+## 現在の実装構成
+- `src/views/HomeView.tsx`
+  - Home 画面の組み立てとページ遷移イベントを担当
+- `src/hooks`
+  - ダッシュボード状態、メトリクス取得、ログウィジェット状態を担当
+- `src/dashboard`
+  - ウィジェット定義、レイアウト正規化、共通定数・ユーティリティを担当
+- `src/widgets/dashboard`
+  - 各ウィジェットとウィジェット追加プレビューを担当
+
 ## 開発
 1. `yarn install`
 2. `yarn workspace @lab-core/dashboard dev`

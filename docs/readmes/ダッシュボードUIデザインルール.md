@@ -17,7 +17,10 @@
 ダッシュボード配下の UI を変更するときは、実装前に必ずこの文書を確認してください。
 
 対象範囲:
+- `core/dashboard/src/dashboard`
+- `core/dashboard/src/hooks`
 - `core/dashboard/src/components`
+- `core/dashboard/src/widgets`
 - `core/dashboard/src/views`
 - `core/dashboard/src/styles.css`
 
