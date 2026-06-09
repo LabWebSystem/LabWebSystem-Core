@@ -32,3 +32,9 @@
 - `docs/logs` が肥大化してきたら、定期的に内容を統合して `docs/summarys` に要約を作成する。
 - 要約へ統合する前の元ログは `docs/archives` へ移動する。
 - 草案・検討中メモ・未確定文書は `docs/temps` に置く。
+
+## UI デザイン参照ルール
+
+- ダッシュボード UI を追加・修正する前に、必ず `docs/readmes/ダッシュボードUIデザインルール.md` を確認する。
+- `core/dashboard/src/components` / `core/dashboard/src/views` / `core/dashboard/src/styles.css` を編集するときは、このルール文書に沿って見た目を合わせる。
+- 新しい UI パターンを追加して既存ルールでは不足する場合は、実装だけで済ませず `docs/readmes/ダッシュボードUIデザインルール.md` も更新する。

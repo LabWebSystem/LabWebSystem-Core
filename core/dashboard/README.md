@@ -11,6 +11,10 @@
 - DNS/Proxy 手動同期ボタン
 - 最近のイベント表示
 
+## UI変更時の参照先
+- ダッシュボードの見た目ルールは `docs/readmes/ダッシュボードUIデザインルール.md` を参照する
+- UI を追加・修正するときは、既存画面の骨格よりもこのルール文書を優先して整合性を確認する
+
 ## 開発
 1. `yarn install`
 2. `yarn workspace @lab-core/dashboard dev`
