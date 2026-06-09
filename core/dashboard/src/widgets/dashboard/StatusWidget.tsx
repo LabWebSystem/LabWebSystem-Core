@@ -8,13 +8,22 @@ type StatusWidgetProps = {
   applications: ApplicationListItem[];
   jobs: ApplicationJob[];
   metrics: DashboardMetrics | null;
-  dashboardPageCount: number;
-  dashboardWidgetCount: number;
 };
 
 export function StatusWidget(props: StatusWidgetProps) {
-  const { frameProps, system, applications, jobs, metrics, dashboardPageCount, dashboardWidgetCount } = props;
+  const { frameProps, system, applications, jobs, metrics } = props;
   const { mode } = frameProps;
+  const alertingApplications = applications.filter(
+    (application) => application.health?.severity === "critical" || Boolean(application.latest_error_title)
+  ).length;
+  const cardPadding = mode === "compact" ? "p-3" : "p-4";
+  const labelClass = mode === "compact" ? "text-[10px]" : "text-xs";
+  const valueClass = mode === "detail" ? "text-4xl" : mode === "compact" ? "text-2xl" : "text-3xl";
+  const metaClass = mode === "compact" ? "text-xs" : "text-sm";
+  const gridClass =
+    mode === "detail"
+      ? "grid-cols-2 xl:grid-cols-4"
+      : "grid-cols-2";
 
   const summaryCards = [
     {
@@ -39,22 +48,24 @@ export function StatusWidget(props: StatusWidgetProps) {
       meta: "待機・要確認"
     },
     {
-      label: "ページ",
-      value: dashboardPageCount,
-      tone: "border-violet-200 bg-violet-50",
-      textTone: "text-violet-900",
-      meta: `ウィジェット ${dashboardWidgetCount}`
+      label: "異常",
+      value: alertingApplications,
+      tone: "border-rose-200 bg-rose-50",
+      textTone: "text-rose-900",
+      meta: "アラート発生中のアプリ"
     }
   ];
 
   return (
     <WidgetFrame {...frameProps}>
-      <div className={`grid h-full gap-3 ${mode === "compact" ? "grid-cols-2" : "sm:grid-cols-2 xl:grid-cols-4"}`}>
+      <div className={`grid h-full auto-rows-fr gap-3 ${gridClass}`}>
         {summaryCards.map((card) => (
-          <div key={card.label} className={`rounded-2xl border p-4 ${card.tone}`}>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{card.label}</p>
-            <p className={`mt-3 ${mode === "detail" ? "text-4xl" : "text-3xl"} font-bold ${card.textTone}`}>{card.value}</p>
-            {mode !== "compact" ? <p className="mt-2 text-sm text-slate-500">{card.meta}</p> : null}
+          <div key={card.label} className={`flex min-h-0 flex-col justify-between rounded-2xl border ${cardPadding} ${card.tone}`}>
+            <p className={`${labelClass} font-semibold uppercase tracking-[0.2em] text-slate-400`}>{card.label}</p>
+            <div className="mt-2 min-h-0">
+              <p className={`${valueClass} font-bold ${card.textTone}`}>{card.value}</p>
+              <p className={`mt-1 line-clamp-2 ${metaClass} ${card.label === "異常" ? "text-rose-700" : "text-slate-500"}`}>{card.meta}</p>
+            </div>
           </div>
         ))}
       </div>

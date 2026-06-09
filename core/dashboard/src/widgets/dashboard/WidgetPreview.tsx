@@ -32,7 +32,7 @@ export function WidgetPreview(props: { type: DashboardWidgetType }) {
             ["アプリ", "12"],
             ["正常", "10"],
             ["ジョブ", "3"],
-            ["ページ", "4"]
+            ["異常", "2"]
           ].map(([label, value], index) => (
             <div
               key={label}
@@ -42,7 +42,7 @@ export function WidgetPreview(props: { type: DashboardWidgetType }) {
                   : index === 2
                     ? "border-amber-200 bg-amber-50"
                     : index === 3
-                      ? "border-violet-200 bg-violet-50"
+                      ? "border-rose-200 bg-rose-50"
                       : "border-slate-200 bg-slate-50"
               }`}
             >

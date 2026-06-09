@@ -70,8 +70,6 @@ export function DashboardWidgetRenderer(props: DashboardWidgetRendererProps) {
           applications={applications}
           jobs={jobs}
           metrics={metrics}
-          dashboardPageCount={dashboardPageCount}
-          dashboardWidgetCount={dashboardWidgetCount}
         />
       );
     case "cpu":
