@@ -347,11 +347,16 @@ export type DashboardWidgetType =
   | "jobs"
   | "events";
 
+export type DashboardPage = {
+  id: string;
+  title: string;
+};
+
 export type DashboardWidget = {
   id: string;
   type: DashboardWidgetType;
   title: string;
-  page: number;
+  pageId: string;
   static?: boolean;
   isDraggable?: boolean;
   isResizable?: boolean;
@@ -362,7 +367,7 @@ export type DashboardWidget = {
 
 export type DashboardLayoutItem = {
   i: string;
-  page: number;
+  pageId: string;
   x: number;
   y: number;
   w: number;
@@ -379,10 +384,11 @@ export type DashboardLayoutItem = {
 export type DashboardResponsiveLayouts = Record<DashboardBreakpoint, DashboardLayoutItem[]>;
 
 export type DashboardLayoutDocument = {
+  version?: number;
+  pages: DashboardPage[];
   widgets: DashboardWidget[];
   layouts: DashboardResponsiveLayouts;
-  currentPage: number;
-  pageCount: number;
+  currentPageId: string;
 };
 
 export type DashboardLayoutResponse = {
