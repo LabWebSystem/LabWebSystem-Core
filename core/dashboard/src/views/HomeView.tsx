@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Responsive, WidthProvider } from "react-grid-layout/legacy";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -23,6 +23,7 @@ const ResponsiveGridLayout = WidthProvider(Responsive as any) as any;
 const PAGE_EDGE_THRESHOLD_PX = 96;
 const PAGE_EDGE_INITIAL_DELAY_MS = 420;
 const PAGE_EDGE_REPEAT_MS = 520;
+const GRID_VERTICAL_CHROME = CONTAINER_PADDING[1] * 2 - GRID_MARGIN[1];
 
 type HomeViewProps = {
   system: SystemStatus | null;
@@ -37,11 +38,13 @@ type HomeViewProps = {
 export function HomeView(props: HomeViewProps) {
   const { system, applications, jobs, events, onOpenApplications, onOpenEvents, onOpenDetail } = props;
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const currentGridFrameRef = useRef<HTMLDivElement | null>(null);
   const touchScrollLockRef = useRef(false);
   const dragEdgeDirectionRef = useRef<-1 | 1 | null>(null);
   const dragEdgeTimerRef = useRef<number | null>(null);
   const dragEdgeIntervalRef = useRef<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [maxRows, setMaxRows] = useState(1);
 
   const { metrics, metricsHistory } = useDashboardMetrics();
   const { logWidget, logSourceOptions, setApplicationId, setSelectedService } = useDashboardLogWidget(applications);
@@ -168,6 +171,30 @@ export function HomeView(props: HomeViewProps) {
     }
   }
 
+  useEffect(() => {
+    const element = currentGridFrameRef.current;
+    if (!element) {
+      return;
+    }
+
+    const updateMaxRows = () => {
+      const height = element.clientHeight;
+      const nextRows = Math.max(1, Math.floor((height - GRID_VERTICAL_CHROME) / (ROW_HEIGHT + GRID_MARGIN[1])));
+      setMaxRows(nextRows);
+    };
+
+    updateMaxRows();
+
+    const observer = new ResizeObserver(() => {
+      updateMaxRows();
+    });
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [currentPage?.id]);
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.12),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.10),transparent_20%),linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)]">
       <div className="flex items-center justify-end gap-2 border-b border-slate-200/80 bg-white/80 px-5 py-3 backdrop-blur">
@@ -228,6 +255,7 @@ export function HomeView(props: HomeViewProps) {
               return (
                 <section key={page.id} className="h-full min-h-0 shrink-0 p-4">
                   <div
+                    ref={page.id === currentPage?.id ? currentGridFrameRef : null}
                     className={`relative h-full min-h-0 rounded-[1.8rem] border border-white/80 shadow-[0_26px_80px_-60px_rgba(15,23,42,0.6)] backdrop-blur transition ${
                       page.isDraft ? "bg-white/35 opacity-70" : "bg-white/65"
                     }`}
@@ -241,6 +269,7 @@ export function HomeView(props: HomeViewProps) {
                           rowHeight={ROW_HEIGHT}
                           margin={GRID_MARGIN}
                           containerPadding={CONTAINER_PADDING}
+                          maxRows={maxRows}
                           layouts={pageLayouts}
                           isDraggable={editMode}
                           isResizable={editMode}
