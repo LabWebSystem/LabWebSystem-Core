@@ -117,6 +117,7 @@ export function HomeView(props: HomeViewProps) {
   const { system, applications, jobs, events, onOpenApplications, onOpenEvents, onOpenDetail } = props;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const currentGridFrameRef = useRef<HTMLDivElement | null>(null);
+  const initialRepairRef = useRef(false);
   const touchScrollLockRef = useRef(false);
   const dragEdgeDirectionRef = useRef<-1 | 1 | null>(null);
   const dragEdgeTimerRef = useRef<number | null>(null);
@@ -144,12 +145,23 @@ export function HomeView(props: HomeViewProps) {
     currentLayouts,
     changePage,
     updateLayouts,
+    repairDashboard,
     addWidget,
     deleteWidget,
+    clearAllWidgets,
     beginWidgetDrag,
     shiftDraggingWidgetPage,
     endWidgetDrag
   } = useDashboardWorkspace();
+
+  useEffect(() => {
+    if (!dashboard || maxRows < 1 || initialRepairRef.current) {
+      return;
+    }
+
+    initialRepairRef.current = true;
+    repairDashboard(maxRows);
+  }, [dashboard, maxRows, repairDashboard]);
 
   useEffect(() => {
     if (editMode) {
@@ -158,8 +170,16 @@ export function HomeView(props: HomeViewProps) {
 
     clearDragEdgeNavigation();
     setIsLayoutInteracting(false);
-    endWidgetDrag();
-  }, [editMode]);
+    endWidgetDrag(maxRows);
+  }, [editMode, maxRows]);
+
+  function toggleEditMode() {
+    if (!editMode) {
+      repairDashboard(maxRows);
+    }
+
+    setEditMode((previous) => !previous);
+  }
 
   function clearDragEdgeNavigation() {
     dragEdgeDirectionRef.current = null;
@@ -184,10 +204,10 @@ export function HomeView(props: HomeViewProps) {
     dragEdgeDirectionRef.current = direction;
 
     dragEdgeTimerRef.current = window.setTimeout(() => {
-      shiftDraggingWidgetPage(direction);
+      shiftDraggingWidgetPage(direction, maxRows);
 
       dragEdgeIntervalRef.current = window.setInterval(() => {
-        shiftDraggingWidgetPage(direction);
+        shiftDraggingWidgetPage(direction, maxRows);
       }, PAGE_EDGE_REPEAT_MS);
     }, PAGE_EDGE_INITIAL_DELAY_MS);
   }
@@ -313,12 +333,22 @@ export function HomeView(props: HomeViewProps) {
 
         <button
           type="button"
-          onClick={() => setEditMode((previous) => !previous)}
+          onClick={toggleEditMode}
           className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${editMode ? "bg-slate-900 text-white hover:bg-slate-800" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
             }`}
         >
           {editMode ? "編集完了" : "レイアウト編集"}
         </button>
+
+        {editMode ? (
+          <button
+            type="button"
+            onClick={clearAllWidgets}
+            className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+          >
+            全ウィジェット削除
+          </button>
+        ) : null}
 
         <button
           type="button"
@@ -423,11 +453,7 @@ export function HomeView(props: HomeViewProps) {
 
                             const candidateLayouts = nextLayouts as GridLayouts;
 
-                            if (!layoutsFitMaxRows(candidateLayouts, maxRows)) {
-                              return;
-                            }
-
-                            updateLayouts(candidateLayouts);
+                            updateLayouts(candidateLayouts, maxRows);
                           }}
                           onDragStart={(_: unknown, __: unknown, item: { i?: string }) => {
                             setIsLayoutInteracting(true);
@@ -442,7 +468,7 @@ export function HomeView(props: HomeViewProps) {
                           onDragStop={() => {
                             clearDragEdgeNavigation();
                             setIsLayoutInteracting(false);
-                            endWidgetDrag();
+                            endWidgetDrag(maxRows);
                           }}
                           onResizeStart={() => setIsLayoutInteracting(true)}
                           onResizeStop={() => setIsLayoutInteracting(false)}

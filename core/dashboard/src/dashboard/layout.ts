@@ -88,6 +88,83 @@ function findAvailablePosition(
   return null;
 }
 
+function fitsWithinBounds(
+  item: Pick<DashboardLayoutItem, "x" | "y" | "w" | "h">,
+  breakpoint: DashboardBreakpoint,
+  maxRows: number
+): boolean {
+  return item.x >= 0 && item.y >= 0 && item.x + item.w <= COLS[breakpoint] && item.y + item.h <= maxRows;
+}
+
+function coerceWidgetSizing(
+  type: DashboardWidgetType,
+  breakpoint: DashboardBreakpoint,
+  candidate: Partial<Pick<DashboardLayoutItem, "w" | "h" | "minW" | "minH" | "maxW" | "maxH">> | undefined,
+  maxRows: number
+): WidgetSizing {
+  const definition = widgetSizing(type, breakpoint);
+  const maxGridWidth = COLS[breakpoint];
+  const minW = Math.min(maxGridWidth, Math.max(1, toPositiveInteger(candidate?.minW, definition.minW)));
+  const minH = Math.max(1, toPositiveInteger(candidate?.minH, definition.minH));
+  const hardMaxW = candidate?.maxW ? Math.max(minW, toPositiveInteger(candidate.maxW, definition.maxW ?? maxGridWidth)) : definition.maxW;
+  const hardMaxH = candidate?.maxH ? Math.max(minH, toPositiveInteger(candidate.maxH, definition.maxH ?? maxRows)) : definition.maxH;
+  const maxW = Math.min(maxGridWidth, hardMaxW ?? maxGridWidth);
+  const maxH = Math.min(maxRows, hardMaxH ?? maxRows);
+  const w = Math.min(maxW, Math.max(minW, toPositiveInteger(candidate?.w, definition.w)));
+  const h = Math.min(maxH, Math.max(minH, toPositiveInteger(candidate?.h, definition.h)));
+
+  return {
+    w,
+    h,
+    minW,
+    minH,
+    maxW,
+    maxH
+  };
+}
+
+function buildSizedLayoutItem(
+  widget: DashboardWidget,
+  pageId: string,
+  breakpoint: DashboardBreakpoint,
+  size: WidgetSizing,
+  position: { x: number; y: number }
+): DashboardLayoutItem {
+  return {
+    i: widget.id,
+    pageId,
+    x: position.x,
+    y: position.y,
+    w: size.w,
+    h: size.h,
+    minW: size.minW,
+    minH: size.minH,
+    maxW: size.maxW,
+    maxH: size.maxH,
+    static: widget.static,
+    isDraggable: widget.isDraggable,
+    isResizable: widget.isResizable
+  };
+}
+
+function widgetSortKey(
+  widget: DashboardWidget,
+  pageOrder: Map<string, number>,
+  layoutOrder: Map<string, { y: number; x: number }>
+): [number, number, number, string] {
+  const pageIndex = pageOrder.get(widget.pageId) ?? Number.MAX_SAFE_INTEGER;
+  const position = layoutOrder.get(widget.id);
+  return [pageIndex, position?.y ?? Number.MAX_SAFE_INTEGER, position?.x ?? Number.MAX_SAFE_INTEGER, widget.id];
+}
+
+function compareSortKeys(left: [number, number, number, string], right: [number, number, number, string]) {
+  return left[0] - right[0] || left[1] - right[1] || left[2] - right[2] || left[3].localeCompare(right[3]);
+}
+
+function createResponsiveLayoutBucket(): DashboardResponsiveLayouts {
+  return Object.fromEntries(BREAKPOINT_KEYS.map((breakpoint) => [breakpoint, []])) as unknown as DashboardResponsiveLayouts;
+}
+
 function toPositiveInteger(value: unknown, fallback: number): number {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return fallback;
@@ -232,6 +309,29 @@ export function findPlacementForWidget(
     const size = widgetSizing(type, breakpoint);
     const pageItems = layouts[breakpoint].filter((item) => item.pageId === pageId);
     const position = findAvailablePosition(pageItems, breakpoint, size, maxRows);
+
+    if (!position) {
+      return null;
+    }
+
+    placement[breakpoint] = position;
+  }
+
+  return placement;
+}
+
+export function findPlacementForSizedWidget(
+  layouts: DashboardResponsiveLayouts,
+  pageId: string,
+  sizes: Record<DashboardBreakpoint, WidgetSizing>,
+  maxRows: number,
+  excludeWidgetId?: string
+): Record<DashboardBreakpoint, { x: number; y: number }> | null {
+  const placement = {} as Record<DashboardBreakpoint, { x: number; y: number }>;
+
+  for (const breakpoint of BREAKPOINT_KEYS) {
+    const pageItems = layouts[breakpoint].filter((item) => item.pageId === pageId && item.i !== excludeWidgetId);
+    const position = findAvailablePosition(pageItems, breakpoint, sizes[breakpoint], maxRows);
 
     if (!position) {
       return null;
@@ -496,6 +596,104 @@ export function normalizeDashboardLayout(document: unknown): DashboardLayoutDocu
     layouts: normalizedLayouts,
     currentPageId
   });
+}
+
+export function sanitizeDashboardDocument(document: DashboardLayoutDocument, maxRows: number): DashboardLayoutDocument {
+  const source = ensureWidgetsHaveLayouts(document);
+  const normalizedPages = renumberPages(
+    source.pages.map((page) => ({
+      ...page,
+      isDraft: false
+    }))
+  );
+  const pageOrder = new Map(normalizedPages.map((page, index) => [page.id, index]));
+  const lgOrder = new Map(
+    source.layouts.lg.map((item) => [
+      item.i,
+      {
+        y: item.y,
+        x: item.x
+      }
+    ])
+  );
+  const widgets = [...source.widgets].sort((left, right) =>
+    compareSortKeys(widgetSortKey(left, pageOrder, lgOrder), widgetSortKey(right, pageOrder, lgOrder))
+  );
+
+  const nextLayouts = createResponsiveLayoutBucket();
+  let nextPages = [...normalizedPages];
+
+  const nextWidgets = widgets.map((widget) => {
+    const sizes = Object.fromEntries(
+      BREAKPOINT_KEYS.map((breakpoint) => {
+        const existing = source.layouts[breakpoint].find((item) => item.i === widget.id);
+        return [breakpoint, coerceWidgetSizing(widget.type, breakpoint, existing, maxRows)];
+      })
+    ) as Record<DashboardBreakpoint, WidgetSizing>;
+
+    let searchIndex = Math.max(0, pageOrder.get(widget.pageId) ?? 0);
+    let placement: Record<DashboardBreakpoint, { x: number; y: number }> | null = null;
+    let targetPageId = nextPages[searchIndex]?.id ?? nextPages[0]?.id;
+
+    while (!placement) {
+      if (!targetPageId) {
+        const created = createPage(nextPages.length);
+        nextPages = renumberPages([...nextPages, created]);
+        targetPageId = nextPages.at(-1)?.id ?? created.id;
+      }
+
+      placement = findPlacementForSizedWidget(nextLayouts, targetPageId, sizes, maxRows);
+      if (placement) {
+        break;
+      }
+
+      searchIndex += 1;
+      if (searchIndex >= nextPages.length) {
+        nextPages = renumberPages([...nextPages, createPage(nextPages.length)]);
+      }
+      targetPageId = nextPages[searchIndex]?.id ?? null;
+    }
+
+    for (const breakpoint of BREAKPOINT_KEYS) {
+      const item = buildSizedLayoutItem(widget, targetPageId, breakpoint, sizes[breakpoint], placement[breakpoint]);
+      nextLayouts[breakpoint].push(item);
+    }
+
+    return {
+      ...widget,
+      pageId: targetPageId
+    };
+  });
+
+  const usedPageIds = new Set(nextWidgets.map((widget) => widget.pageId));
+  const pages = renumberPages(nextPages.filter((page) => usedPageIds.has(page.id)));
+  const validPageIds = new Set(pages.map((page) => page.id));
+
+  if (pages.length === 0) {
+    const fallbackPage = createPage(0);
+    return {
+      ...source,
+      pages: renumberPages([fallbackPage]),
+      widgets: [],
+      layouts: createResponsiveLayoutBucket(),
+      currentPageId: fallbackPage.id
+    };
+  }
+
+  return {
+    ...source,
+    pages,
+    widgets: nextWidgets.filter((widget) => validPageIds.has(widget.pageId)),
+    layouts: Object.fromEntries(
+      BREAKPOINT_KEYS.map((breakpoint) => [
+        breakpoint,
+        nextLayouts[breakpoint].filter(
+          (item) => validPageIds.has(item.pageId) && fitsWithinBounds(item, breakpoint, maxRows)
+        )
+      ])
+    ) as DashboardResponsiveLayouts,
+    currentPageId: validPageIds.has(source.currentPageId) ? source.currentPageId : pages[0].id
+  };
 }
 
 export function findDisplayLayout(layouts: GridLayouts, breakpoint: DashboardBreakpoint, widgetId: string): GridItemLayout | null {
