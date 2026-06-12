@@ -9,6 +9,9 @@
 
 ## 主要 API
 - `GET /health`
+- `GET /api`
+- `GET /api/openapi.json`
+- `GET /api/openapi.yaml`
 - `GET /api/system/status`
 - `GET /api/applications`
 - `POST /api/applications`
@@ -28,6 +31,12 @@
 - `GET /api/logs/:applicationId/services`
 - `GET /api/logs/:applicationId?service=&tail=`
 - `GET /api/testing/registration-fixtures`
+
+## OpenAPI 仕様
+- 現行仕様書: `docs/readmes/バックエンドOpenAPI仕様.yaml`
+- 実行中 backend からも取得可能:
+  - `GET /api/openapi.json`
+  - `GET /api/openapi.yaml`
 
 ## 実行モード
 - `LAB_CORE_EXECUTION_MODE=dry-run`（既定）

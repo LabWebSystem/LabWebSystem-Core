@@ -60,6 +60,8 @@
   - `docs/archives/20260516_230913_公式仕様統合/official_specification.md`
 - 操作説明（簡易）:
   - `docs/readmes/Lab-Core運用手順書.md`
+- backend OpenAPI 仕様:
+  - `docs/readmes/バックエンドOpenAPI仕様.yaml`
 - 適合アプリ作成ガイド:
   - `docs/readmes/適合アプリ作成ガイド.md`
 - SDK 概要:

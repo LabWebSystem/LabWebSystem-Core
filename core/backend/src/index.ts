@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { db, nowIso } from "./lib/db.js";
 import { env } from "./lib/env.js";
+import { getOpenApiDocument, getOpenApiYaml } from "./openapi.js";
 import { applicationsRouter } from "./routes/applications.js";
 import { eventsRouter } from "./routes/events.js";
 import { infrastructureRouter } from "./routes/infrastructure.js";
@@ -37,7 +38,21 @@ app.get("/api", (c) => {
   return c.json({
     service: "lab-core-backend",
     version: "0.1.0",
-    timestamp: nowIso()
+    timestamp: nowIso(),
+    openapi: {
+      jsonUrl: "/api/openapi.json",
+      yamlUrl: "/api/openapi.yaml"
+    }
+  });
+});
+
+app.get("/api/openapi.json", (c) => {
+  return c.json(getOpenApiDocument());
+});
+
+app.get("/api/openapi.yaml", (c) => {
+  return c.body(getOpenApiYaml(), 200, {
+    "content-type": "application/yaml; charset=utf-8"
   });
 });
 
