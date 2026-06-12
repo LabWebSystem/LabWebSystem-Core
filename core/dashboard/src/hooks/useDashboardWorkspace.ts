@@ -2,17 +2,20 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchDashboardLayout, saveDashboardLayout } from "../api";
 import {
   BREAKPOINT_KEYS,
-  COLS,
   DASHBOARD_ID,
   EMPTY_GRID_LAYOUTS,
   PAGE_ANIMATION_MS,
   USER_ID
 } from "../dashboard/constants";
 import {
+  findPlacementForSizedWidget,
+  findPlacementForWidget,
+  inspectDashboardGuardrails,
+  widgetSizesForDocument
+} from "../dashboard/guardrails";
+import {
   buildDefaultDashboardLayout,
   cloneResponsiveLayouts,
-  findPlacementForWidget,
-  findPlacementForSizedWidget,
   layoutPreset,
   mergeLayoutsForPage,
   normalizeDashboardLayout,
@@ -21,8 +24,7 @@ import {
   toRglLayouts,
   widgetPreset
 } from "../dashboard/layout";
-import type { GridLayouts, SaveState, WidgetSizing } from "../dashboard/types";
-import { widgetSizing } from "../dashboard/widgetDefinitions";
+import type { GridLayouts, SaveState } from "../dashboard/types";
 import type { DashboardBreakpoint, DashboardLayoutDocument, DashboardResponsiveLayouts, DashboardWidgetType } from "../types";
 
 function createPage(index: number, isDraft = false) {
@@ -91,36 +93,6 @@ function pruneEmptyPages(document: DashboardLayoutDocument, preferredCurrentPage
   };
 }
 
-function widgetSizesForDocument(
-  document: DashboardLayoutDocument,
-  widgetId: string,
-  widgetType: DashboardWidgetType,
-  maxRows: number
-): Record<DashboardBreakpoint, WidgetSizing> {
-  return Object.fromEntries(
-    BREAKPOINT_KEYS.map((breakpoint) => {
-      const existing = document.layouts[breakpoint].find((item) => item.i === widgetId);
-      const fallback = widgetSizing(widgetType, breakpoint);
-      const minW = existing?.minW ?? fallback.minW;
-      const minH = existing?.minH ?? fallback.minH;
-      const maxW = Math.min(existing?.maxW ?? fallback.maxW ?? COLS[breakpoint], fallback.maxW ?? COLS[breakpoint], COLS[breakpoint]);
-      const maxH = Math.min(existing?.maxH ?? fallback.maxH ?? maxRows, fallback.maxH ?? maxRows, maxRows);
-
-      return [
-        breakpoint,
-        {
-          w: Math.min(maxW, Math.max(minW, existing?.w ?? fallback.w)),
-          h: Math.min(maxH, Math.max(minH, existing?.h ?? fallback.h)),
-          minW,
-          minH,
-          maxW,
-          maxH
-        }
-      ];
-    })
-  ) as Record<DashboardBreakpoint, WidgetSizing>;
-}
-
 function moveWidgetToPage(
   document: DashboardLayoutDocument,
   widgetId: string,
@@ -132,8 +104,14 @@ function moveWidgetToPage(
     return document;
   }
 
-  const sizes = widgetSizesForDocument(document, widgetId, widget.type, maxRows);
-  const placement = findPlacementForSizedWidget(document.layouts, targetPageId, sizes, maxRows, widgetId);
+  const sizes = widgetSizesForDocument(document.layouts, widgetId, widget.type, maxRows);
+  const placement = findPlacementForSizedWidget({
+    layouts: document.layouts,
+    pageId: targetPageId,
+    sizes,
+    maxRows,
+    excludeWidgetId: widgetId
+  });
 
   if (!placement) {
     return document;
@@ -295,7 +273,20 @@ export function useDashboardWorkspace() {
   }
 
   function repairDashboard(maxRows: number) {
-    setDashboard((previous) => (previous ? sanitizeDashboardDocument(previous, maxRows) : previous));
+    setDashboard((previous) => {
+      if (!previous) {
+        return previous;
+      }
+
+      const repaired = sanitizeDashboardDocument(previous, maxRows);
+      const report = inspectDashboardGuardrails(repaired, maxRows);
+
+      if (report.structureViolations.length > 0 || report.geometryViolations.length > 0) {
+        console.warn("Dashboard guardrails detected remaining violations after repair.", report);
+      }
+
+      return repaired;
+    });
   }
 
   function addWidget(type: DashboardWidgetType, maxRows: number) {
@@ -316,7 +307,12 @@ export function useDashboardWorkspace() {
           continue;
         }
 
-        const candidatePlacement = findPlacementForWidget(previous.layouts, candidatePage.id, type, maxRows);
+        const candidatePlacement = findPlacementForWidget({
+          layouts: previous.layouts,
+          pageId: candidatePage.id,
+          type,
+          maxRows
+        });
         if (candidatePlacement) {
           targetPageId = candidatePage.id;
           placement = candidatePlacement;
@@ -327,7 +323,12 @@ export function useDashboardWorkspace() {
       if (!targetPageId) {
         const nextPage = createPage(pages.length);
         pages = renumberPages([...pages, nextPage]);
-        placement = findPlacementForWidget(previous.layouts, nextPage.id, type, maxRows);
+        placement = findPlacementForWidget({
+          layouts: previous.layouts,
+          pageId: nextPage.id,
+          type,
+          maxRows
+        });
         targetPageId = nextPage.id;
       }
 
