@@ -22,10 +22,8 @@ export function coerceWidgetSizing(
   const maxGridWidth = COLS[breakpoint];
   const minW = Math.min(maxGridWidth, Math.max(1, toPositiveInteger(candidate?.minW, definition.minW)));
   const minH = Math.max(1, toPositiveInteger(candidate?.minH, definition.minH));
-  const hardMaxW = candidate?.maxW ? Math.max(minW, toPositiveInteger(candidate.maxW, definition.maxW ?? maxGridWidth)) : definition.maxW;
-  const hardMaxH = candidate?.maxH ? Math.max(minH, toPositiveInteger(candidate.maxH, definition.maxH ?? maxRows)) : definition.maxH;
-  const maxW = Math.min(maxGridWidth, hardMaxW ?? maxGridWidth);
-  const maxH = Math.min(maxRows, hardMaxH ?? maxRows);
+  const maxW = Math.min(maxGridWidth, definition.maxW ?? maxGridWidth);
+  const maxH = Math.min(maxRows, definition.maxH ?? maxRows);
   const w = Math.min(maxW, Math.max(minW, toPositiveInteger(candidate?.w, definition.w)));
   const h = Math.min(maxH, Math.max(minH, toPositiveInteger(candidate?.h, definition.h)));
 
@@ -51,8 +49,8 @@ export function widgetSizesForDocument(
       const fallback = widgetSizing(widgetType, breakpoint);
       const minW = existing?.minW ?? fallback.minW;
       const minH = existing?.minH ?? fallback.minH;
-      const maxW = Math.min(existing?.maxW ?? fallback.maxW ?? COLS[breakpoint], fallback.maxW ?? COLS[breakpoint], COLS[breakpoint]);
-      const maxH = Math.min(existing?.maxH ?? fallback.maxH ?? maxRows, fallback.maxH ?? maxRows, maxRows);
+      const maxW = Math.min(fallback.maxW ?? COLS[breakpoint], COLS[breakpoint]);
+      const maxH = Math.min(fallback.maxH ?? maxRows, maxRows);
 
       return [
         breakpoint,

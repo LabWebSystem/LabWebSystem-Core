@@ -278,6 +278,11 @@ export function useDashboardWorkspace() {
         return previous;
       }
 
+      const currentReport = inspectDashboardGuardrails(previous, maxRows);
+      if (currentReport.structureViolations.length === 0 && currentReport.geometryViolations.length === 0) {
+        return previous;
+      }
+
       const repaired = sanitizeDashboardDocument(previous, maxRows);
       const report = inspectDashboardGuardrails(repaired, maxRows);
 

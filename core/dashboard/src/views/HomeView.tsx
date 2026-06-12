@@ -44,6 +44,16 @@ type HomeViewProps = {
   onOpenDetail: (applicationId: string) => void;
 };
 
+type DragPreviewState = {
+  widgetId: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  offsetX: number;
+  offsetY: number;
+};
+
 function overlapsHorizontally(
   a: Pick<GridItemLayout, "x" | "w">,
   b: Pick<GridItemLayout, "x" | "w">
@@ -117,13 +127,13 @@ export function HomeView(props: HomeViewProps) {
   const { system, applications, jobs, events, onOpenApplications, onOpenEvents, onOpenDetail } = props;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const currentGridFrameRef = useRef<HTMLDivElement | null>(null);
-  const initialRepairRef = useRef(false);
   const touchScrollLockRef = useRef(false);
   const dragEdgeDirectionRef = useRef<-1 | 1 | null>(null);
   const dragEdgeTimerRef = useRef<number | null>(null);
   const dragEdgeIntervalRef = useRef<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [maxRows, setMaxRows] = useState(1);
+  const [dragPreview, setDragPreview] = useState<DragPreviewState | null>(null);
 
   const { metrics, metricsHistory } = useDashboardMetrics();
   const { logWidget, logSourceOptions, setApplicationId, setSelectedService } = useDashboardLogWidget(applications);
@@ -155,13 +165,12 @@ export function HomeView(props: HomeViewProps) {
   } = useDashboardWorkspace();
 
   useEffect(() => {
-    if (!dashboard || maxRows < 1 || initialRepairRef.current) {
+    if (!dashboard || maxRows < 1 || isLayoutInteracting) {
       return;
     }
 
-    initialRepairRef.current = true;
     repairDashboard(maxRows);
-  }, [dashboard, maxRows, repairDashboard]);
+  }, [dashboard?.currentPageId, maxRows, isLayoutInteracting, repairDashboard]);
 
   useEffect(() => {
     if (editMode) {
@@ -170,6 +179,7 @@ export function HomeView(props: HomeViewProps) {
 
     clearDragEdgeNavigation();
     setIsLayoutInteracting(false);
+    setDragPreview(null);
     endWidgetDrag(maxRows);
   }, [editMode, maxRows]);
 
@@ -340,15 +350,19 @@ export function HomeView(props: HomeViewProps) {
           {editMode ? "編集完了" : "レイアウト編集"}
         </button>
 
-        {editMode ? (
-          <button
-            type="button"
-            onClick={clearAllWidgets}
-            className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
-          >
-            全ウィジェット削除
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={clearAllWidgets}
+          disabled={!editMode}
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            editMode
+              ? "border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+              : "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400 opacity-70"
+          }`}
+          title={editMode ? "全ウィジェットを削除" : "編集モード中のみ利用できます"}
+        >
+          全ウィジェット削除
+        </button>
 
         <button
           type="button"
@@ -455,26 +469,55 @@ export function HomeView(props: HomeViewProps) {
 
                             updateLayouts(candidateLayouts, maxRows);
                           }}
-                          onDragStart={(_: unknown, __: unknown, item: { i?: string }) => {
+                          onDragStart={(_: unknown, __: unknown, item: { i?: string }, ___: unknown, event: unknown, element: HTMLElement) => {
                             setIsLayoutInteracting(true);
 
                             if (item?.i) {
                               beginWidgetDrag(item.i);
                             }
+
+                            if (event instanceof MouseEvent && element instanceof HTMLElement && item?.i) {
+                              const rect = element.getBoundingClientRect();
+                              setDragPreview({
+                                widgetId: item.i,
+                                left: rect.left,
+                                top: rect.top,
+                                width: rect.width,
+                                height: rect.height,
+                                offsetX: event.clientX - rect.left,
+                                offsetY: event.clientY - rect.top
+                              });
+                            }
                           }}
                           onDrag={(_: unknown, __: unknown, ___: unknown, ____: unknown, event: unknown) => {
                             handleGridDrag(event);
+
+                            if (event instanceof MouseEvent) {
+                              setDragPreview((previous) =>
+                                previous
+                                  ? {
+                                      ...previous,
+                                      left: event.clientX - previous.offsetX,
+                                      top: event.clientY - previous.offsetY
+                                    }
+                                  : previous
+                              );
+                            }
                           }}
                           onDragStop={() => {
                             clearDragEdgeNavigation();
                             setIsLayoutInteracting(false);
+                            setDragPreview(null);
                             endWidgetDrag(maxRows);
                           }}
                           onResizeStart={() => setIsLayoutInteracting(true)}
-                          onResizeStop={() => setIsLayoutInteracting(false)}
+                          onResizeStop={() => {
+                            setIsLayoutInteracting(false);
+                            repairDashboard(maxRows);
+                          }}
                         >
                           {pageWidgets.map((widget) => (
-                            <div key={widget.id} className="overflow-hidden">
+                            <div key={widget.id} className={`overflow-hidden ${dragPreview?.widgetId === widget.id ? "opacity-0" : ""}`}>
                               <DashboardWidgetRenderer
                                 widget={widget}
                                 layout={findDisplayLayout(guardedPageLayouts, breakpoint, widget.id)}
@@ -526,6 +569,51 @@ export function HomeView(props: HomeViewProps) {
             })}
           </div>
         </div>
+
+        {dragPreview && dashboard ? (
+          (() => {
+            const previewWidget = dashboard.widgets.find((widget) => widget.id === dragPreview.widgetId);
+            const previewPageId = previewWidget?.pageId ?? currentPage?.id ?? "";
+            const previewLayouts = dashboard ? toRglLayouts(dashboard, previewPageId) : { lg: [], md: [], sm: [], xs: [] };
+
+            return previewWidget ? (
+              <div
+                className="pointer-events-none fixed z-[80] overflow-hidden rounded-[1.4rem]"
+                style={{
+                  left: dragPreview.left,
+                  top: dragPreview.top,
+                  width: dragPreview.width,
+                  height: dragPreview.height
+                }}
+              >
+                <DashboardWidgetRenderer
+                  widget={previewWidget}
+                  layout={findDisplayLayout(previewLayouts, breakpoint, previewWidget.id)}
+                  pageIndex={currentPageIndex}
+                  totalPages={dashboard.pages.length}
+                  breakpoint={breakpoint}
+                  editMode={true}
+                  onDelete={deleteWidget}
+                  system={system}
+                  applications={applications}
+                  jobs={jobs}
+                  events={events}
+                  metrics={metrics}
+                  metricsHistory={metricsHistory}
+                  dashboardPageCount={dashboard.pages.length}
+                  dashboardWidgetCount={dashboard.widgets.length}
+                  logWidget={logWidget}
+                  logSourceOptions={logSourceOptions}
+                  onLogApplicationChange={setApplicationId}
+                  onLogServiceChange={setSelectedService}
+                  onOpenApplications={onOpenApplications}
+                  onOpenEvents={onOpenEvents}
+                  onOpenDetail={onOpenDetail}
+                />
+              </div>
+            ) : null;
+          })()
+        ) : null}
 
         <aside className="hidden w-24 shrink-0 flex-col items-center justify-center gap-3 pr-4 lg:flex">
           {(dashboard?.pages ?? []).map((page, pageIndex) => (
