@@ -61,7 +61,7 @@
 - 操作説明（簡易）:
   - `docs/readmes/Lab-Core運用手順書.md`
 - backend OpenAPI 仕様:
-  - `docs/readmes/バックエンドOpenAPI仕様.yaml`
+  - `core/backend/openapi/openapi.yaml`
 - 適合アプリ作成ガイド:
   - `docs/readmes/適合アプリ作成ガイド.md`
 - SDK 概要:

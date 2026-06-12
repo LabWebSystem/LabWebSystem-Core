@@ -33,10 +33,11 @@
 - `GET /api/testing/registration-fixtures`
 
 ## OpenAPI 仕様
-- 現行仕様書: `docs/readmes/バックエンドOpenAPI仕様.yaml`
+- 正本: `core/backend/openapi/openapi.yaml`
 - 実行中 backend からも取得可能:
   - `GET /api/openapi.json`
   - `GET /api/openapi.yaml`
+- 必要に応じて `LAB_CORE_OPENAPI_PATH` で読込先を上書き可能
 
 ## 実行モード
 - `LAB_CORE_EXECUTION_MODE=dry-run`（既定）

@@ -1,26 +1,30 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 
-function findProjectRoot(startDir: string): string {
-  let current = startDir;
+const currentModuleDir = path.dirname(fileURLToPath(import.meta.url));
 
-  while (true) {
-    if (fs.existsSync(path.join(current, ".git"))) {
-      return current;
+function resolveOpenApiFilePath(): string {
+  const envPath = process.env.LAB_CORE_OPENAPI_PATH;
+  const candidates = [
+    envPath,
+    path.resolve(currentModuleDir, "../openapi/openapi.yaml"),
+    path.resolve(currentModuleDir, "../../openapi/openapi.yaml"),
+    path.resolve(process.cwd(), "core/backend/openapi/openapi.yaml"),
+    path.resolve(process.cwd(), "openapi/openapi.yaml")
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
     }
-
-    const parent = path.dirname(current);
-    if (parent === current) {
-      return startDir;
-    }
-
-    current = parent;
   }
+
+  throw new Error(`OpenAPI 仕様ファイルが見つかりません: ${candidates.join(", ")}`);
 }
 
-const projectRoot = findProjectRoot(process.cwd());
-const openApiFilePath = path.resolve(projectRoot, "docs/readmes/バックエンドOpenAPI仕様.yaml");
+const openApiFilePath = resolveOpenApiFilePath();
 
 export function getOpenApiYaml(): string {
   return fs.readFileSync(openApiFilePath, "utf8");
