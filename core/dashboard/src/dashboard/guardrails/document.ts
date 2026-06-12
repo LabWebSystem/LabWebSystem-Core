@@ -32,7 +32,7 @@ function buildSizedLayoutItem(context: DashboardSizedLayoutItemContext): Dashboa
 }
 
 function createResponsiveLayoutBucket() {
-  return Object.fromEntries(BREAKPOINT_KEYS.map((breakpoint) => [breakpoint, []])) as DashboardLayoutDocument["layouts"];
+  return Object.fromEntries(BREAKPOINT_KEYS.map((breakpoint) => [breakpoint, []])) as unknown as DashboardLayoutDocument["layouts"];
 }
 
 function widgetSortKey(widget: DashboardWidget, context: DashboardWidgetSortContext): [number, number, number, string] {
