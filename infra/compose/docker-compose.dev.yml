@@ -1,16 +1,22 @@
+x-labcore-node-tools: &labcore-node-tools
+  build:
+    context: ../..
+    dockerfile: infra/compose/Dockerfile.dev-node-tools
+  image: labcore-dev-node-tools:latest
+
 services:
   deps:
-    image: node:20-alpine
+    <<: *labcore-node-tools
     working_dir: ${LAB_CORE_HOST_PROJECT_ROOT:-/workspace}
-    command: sh -lc "apk add --no-cache git docker-cli docker-cli-compose python3 make g++ && corepack yarn install --immutable"
+    command: sh -lc "node scripts/dev/sync-workspace-deps.mjs"
     volumes:
       - ${LAB_CORE_HOST_PROJECT_ROOT:-../../}:${LAB_CORE_HOST_PROJECT_ROOT:-/workspace}
       - labcore_node_modules:${LAB_CORE_HOST_PROJECT_ROOT:-/workspace}/node_modules
 
   backend:
-    image: node:20-alpine
+    <<: *labcore-node-tools
     working_dir: ${LAB_CORE_HOST_PROJECT_ROOT:-/workspace}
-    command: sh -lc "apk add --no-cache git docker-cli docker-cli-compose && corepack yarn service:backend:up"
+    command: sh -lc "corepack yarn service:backend:up"
     restart: unless-stopped
     volumes:
       - ${LAB_CORE_HOST_PROJECT_ROOT:-../../}:${LAB_CORE_HOST_PROJECT_ROOT:-/workspace}
@@ -20,7 +26,7 @@ services:
       - "7300:7300"
 
   dashboard:
-    image: node:20-alpine
+    <<: *labcore-node-tools
     working_dir: ${LAB_CORE_HOST_PROJECT_ROOT:-/workspace}
     command: sh -lc "corepack yarn workspace @lab-core/dashboard build && corepack yarn workspace @lab-core/dashboard preview --host 0.0.0.0 --port 4173"
     restart: unless-stopped

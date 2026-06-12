@@ -68,7 +68,7 @@ function coreDeps(options: RunOptions = {}): void {
 function coreUp(options: RunOptions = {}): void {
   ensureGeneratedFiles(options);
   coreDeps(options);
-  runCompose("core", ["up", "-d", "backend", "dashboard"], {
+  runCompose("core", ["up", "-d", "--force-recreate", "backend", "dashboard"], {
     env: { ...coreComposeEnv, ...(options.env ?? {}) }
   });
 }
