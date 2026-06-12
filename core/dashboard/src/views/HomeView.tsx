@@ -169,8 +169,8 @@ export function HomeView(props: HomeViewProps) {
       return;
     }
 
-    repairDashboard(maxRows);
-  }, [dashboard?.currentPageId, maxRows, isLayoutInteracting, repairDashboard]);
+    repairDashboard(maxRows, breakpoint);
+  }, [dashboard?.currentPageId, maxRows, breakpoint, isLayoutInteracting, repairDashboard]);
 
   useEffect(() => {
     if (editMode) {
@@ -180,12 +180,12 @@ export function HomeView(props: HomeViewProps) {
     clearDragEdgeNavigation();
     setIsLayoutInteracting(false);
     setDragPreview(null);
-    endWidgetDrag(maxRows);
-  }, [editMode, maxRows]);
+    endWidgetDrag(maxRows, breakpoint);
+  }, [editMode, maxRows, breakpoint]);
 
   function toggleEditMode() {
     if (!editMode) {
-      repairDashboard(maxRows);
+      repairDashboard(maxRows, breakpoint);
     }
 
     setEditMode((previous) => !previous);
@@ -214,10 +214,10 @@ export function HomeView(props: HomeViewProps) {
     dragEdgeDirectionRef.current = direction;
 
     dragEdgeTimerRef.current = window.setTimeout(() => {
-      shiftDraggingWidgetPage(direction, maxRows);
+      shiftDraggingWidgetPage(direction, maxRows, breakpoint);
 
       dragEdgeIntervalRef.current = window.setInterval(() => {
-        shiftDraggingWidgetPage(direction, maxRows);
+        shiftDraggingWidgetPage(direction, maxRows, breakpoint);
       }, PAGE_EDGE_REPEAT_MS);
     }, PAGE_EDGE_INITIAL_DELAY_MS);
   }
@@ -467,7 +467,7 @@ export function HomeView(props: HomeViewProps) {
 
                             const candidateLayouts = nextLayouts as GridLayouts;
 
-                            updateLayouts(candidateLayouts, maxRows);
+                            updateLayouts(candidateLayouts, maxRows, breakpoint);
                           }}
                           onDragStart={(_: unknown, __: unknown, item: { i?: string }, ___: unknown, event: unknown, element: HTMLElement) => {
                             setIsLayoutInteracting(true);
@@ -508,40 +508,48 @@ export function HomeView(props: HomeViewProps) {
                             clearDragEdgeNavigation();
                             setIsLayoutInteracting(false);
                             setDragPreview(null);
-                            endWidgetDrag(maxRows);
+                            endWidgetDrag(maxRows, breakpoint);
                           }}
                           onResizeStart={() => setIsLayoutInteracting(true)}
                           onResizeStop={() => {
                             setIsLayoutInteracting(false);
-                            repairDashboard(maxRows);
+                            repairDashboard(maxRows, breakpoint);
                           }}
                         >
                           {pageWidgets.map((widget) => (
-                            <div key={widget.id} className={`overflow-hidden ${dragPreview?.widgetId === widget.id ? "opacity-0" : ""}`}>
-                              <DashboardWidgetRenderer
-                                widget={widget}
-                                layout={findDisplayLayout(guardedPageLayouts, breakpoint, widget.id)}
-                                pageIndex={pageIndex}
-                                totalPages={dashboard.pages.length}
-                                breakpoint={breakpoint}
-                                editMode={editMode}
-                                onDelete={deleteWidget}
-                                system={system}
-                                applications={applications}
-                                jobs={jobs}
-                                events={events}
-                                metrics={metrics}
-                                metricsHistory={metricsHistory}
-                                dashboardPageCount={dashboard.pages.length}
-                                dashboardWidgetCount={dashboard.widgets.length}
-                                logWidget={logWidget}
-                                logSourceOptions={logSourceOptions}
-                                onLogApplicationChange={setApplicationId}
-                                onLogServiceChange={setSelectedService}
-                                onOpenApplications={onOpenApplications}
-                                onOpenEvents={onOpenEvents}
-                                onOpenDetail={onOpenDetail}
-                              />
+                            <div key={widget.id} className="overflow-hidden">
+                              {dragPreview?.widgetId === widget.id ? (
+                                <div className="flex h-full min-h-0 items-center justify-center rounded-[1.4rem] border-2 border-dashed border-violet-300 bg-violet-100/45">
+                                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-500">
+                                    配置先
+                                  </span>
+                                </div>
+                              ) : (
+                                <DashboardWidgetRenderer
+                                  widget={widget}
+                                  layout={findDisplayLayout(guardedPageLayouts, breakpoint, widget.id)}
+                                  pageIndex={pageIndex}
+                                  totalPages={dashboard.pages.length}
+                                  breakpoint={breakpoint}
+                                  editMode={editMode}
+                                  onDelete={deleteWidget}
+                                  system={system}
+                                  applications={applications}
+                                  jobs={jobs}
+                                  events={events}
+                                  metrics={metrics}
+                                  metricsHistory={metricsHistory}
+                                  dashboardPageCount={dashboard.pages.length}
+                                  dashboardWidgetCount={dashboard.widgets.length}
+                                  logWidget={logWidget}
+                                  logSourceOptions={logSourceOptions}
+                                  onLogApplicationChange={setApplicationId}
+                                  onLogServiceChange={setSelectedService}
+                                  onOpenApplications={onOpenApplications}
+                                  onOpenEvents={onOpenEvents}
+                                  onOpenDetail={onOpenDetail}
+                                />
+                              )}
                             </div>
                           ))}
                         </ResponsiveGridLayout>
@@ -644,7 +652,7 @@ export function HomeView(props: HomeViewProps) {
         <WidgetPickerModal
           breakpoint={breakpoint}
           onClose={() => setWidgetPickerOpen(false)}
-          onSelect={(type) => addWidget(type, maxRows)}
+          onSelect={(type) => addWidget(type, maxRows, breakpoint)}
         />
       ) : null}
     </div>

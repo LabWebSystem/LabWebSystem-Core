@@ -1,4 +1,4 @@
-import { BREAKPOINT_KEYS } from "../constants";
+import { BREAKPOINT_KEYS, COLS } from "../constants";
 import type { DashboardBreakpoint, DashboardLayoutDocument, DashboardLayoutItem, DashboardWidget } from "../../types";
 import type { WidgetSizing } from "../types";
 import { coerceWidgetSizing } from "./sizing";
@@ -45,15 +45,19 @@ function compareSortKeys(left: [number, number, number, string], right: [number,
   return left[0] - right[0] || left[1] - right[1] || left[2] - right[2] || left[3].localeCompare(right[3]);
 }
 
-export function inspectDashboardGuardrails(document: DashboardLayoutDocument, maxRows: number): DashboardGuardrailReport {
+export function inspectDashboardGuardrails(
+  document: DashboardLayoutDocument,
+  maxRows: number,
+  strictBreakpoint?: DashboardBreakpoint
+): DashboardGuardrailReport {
   return {
     structureViolations: validateDashboardStructure({ document }),
-    geometryViolations: validateDashboardGeometry({ document, maxRows })
+    geometryViolations: validateDashboardGeometry({ document, maxRows, strictBreakpoint })
   };
 }
 
 export function sanitizeDashboardDocument(context: DashboardSanitizeContext): DashboardLayoutDocument {
-  const { document, maxRows, createPage, ensureWidgetsHaveLayouts, renumberPages } = context;
+  const { document, maxRows, createPage, ensureWidgetsHaveLayouts, renumberPages, strictBreakpoint } = context;
   const source = ensureWidgetsHaveLayouts(document);
   const normalizedPages = renumberPages(
     source.pages.map((page) => ({
@@ -62,8 +66,9 @@ export function sanitizeDashboardDocument(context: DashboardSanitizeContext): Da
     }))
   );
   const pageOrder = new Map(normalizedPages.map((page, index) => [page.id, index]));
+  const layoutOrderBreakpoint = strictBreakpoint ?? "lg";
   const lgOrder = new Map(
-    source.layouts.lg.map((item) => [
+    source.layouts[layoutOrderBreakpoint].map((item) => [
       item.i,
       {
         y: item.y,
@@ -102,7 +107,8 @@ export function sanitizeDashboardDocument(context: DashboardSanitizeContext): Da
         layouts: nextLayouts,
         pageId: targetPageId,
         sizes,
-        maxRows
+        maxRows,
+        strictBreakpoint
       });
 
       if (placement) {
@@ -157,7 +163,12 @@ export function sanitizeDashboardDocument(context: DashboardSanitizeContext): Da
       BREAKPOINT_KEYS.map((breakpoint) => [
         breakpoint,
         nextLayouts[breakpoint].filter(
-          (item) => validPageIds.has(item.pageId) && fitsWithinBounds(item, breakpoint, maxRows)
+          (item) =>
+            validPageIds.has(item.pageId) &&
+            item.x >= 0 &&
+            item.y >= 0 &&
+            item.x + item.w <= COLS[breakpoint] &&
+            (strictBreakpoint ? true : fitsWithinBounds(item, breakpoint, maxRows))
         )
       ])
     ) as DashboardLayoutDocument["layouts"],

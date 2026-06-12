@@ -97,7 +97,8 @@ function moveWidgetToPage(
   document: DashboardLayoutDocument,
   widgetId: string,
   targetPageId: string,
-  maxRows: number
+  maxRows: number,
+  strictBreakpoint?: DashboardBreakpoint
 ): DashboardLayoutDocument {
   const widget = document.widgets.find((candidate) => candidate.id === widgetId);
   if (!widget || widget.pageId === targetPageId) {
@@ -110,7 +111,8 @@ function moveWidgetToPage(
     pageId: targetPageId,
     sizes,
     maxRows,
-    excludeWidgetId: widgetId
+    excludeWidgetId: widgetId,
+    strictBreakpoint
   });
 
   if (!placement) {
@@ -259,32 +261,36 @@ export function useDashboardWorkspace() {
     setDashboard((previous) => (previous ? { ...previous, currentPageId: nextPage.id } : previous));
   }
 
-  function updateLayouts(nextLayouts: GridLayouts, maxRows: number) {
+  function updateLayouts(nextLayouts: GridLayouts, maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
     setDashboard((previous) => {
       if (!previous || !currentPage) {
         return previous;
       }
 
-      return sanitizeDashboardDocument({
+      return sanitizeDashboardDocument(
+        {
         ...previous,
         layouts: mergeLayoutsForPage(previous.layouts, currentPage.id, nextLayouts, previous.widgets)
-      }, maxRows);
+        },
+        maxRows,
+        strictBreakpoint
+      );
     });
   }
 
-  function repairDashboard(maxRows: number) {
+  function repairDashboard(maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
     setDashboard((previous) => {
       if (!previous) {
         return previous;
       }
 
-      const currentReport = inspectDashboardGuardrails(previous, maxRows);
+      const currentReport = inspectDashboardGuardrails(previous, maxRows, strictBreakpoint);
       if (currentReport.structureViolations.length === 0 && currentReport.geometryViolations.length === 0) {
         return previous;
       }
 
-      const repaired = sanitizeDashboardDocument(previous, maxRows);
-      const report = inspectDashboardGuardrails(repaired, maxRows);
+      const repaired = sanitizeDashboardDocument(previous, maxRows, strictBreakpoint);
+      const report = inspectDashboardGuardrails(repaired, maxRows, strictBreakpoint);
 
       if (report.structureViolations.length > 0 || report.geometryViolations.length > 0) {
         console.warn("Dashboard guardrails detected remaining violations after repair.", report);
@@ -294,7 +300,7 @@ export function useDashboardWorkspace() {
     });
   }
 
-  function addWidget(type: DashboardWidgetType, maxRows: number) {
+  function addWidget(type: DashboardWidgetType, maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
     setDashboard((previous) => {
       if (!previous) {
         return previous;
@@ -316,7 +322,8 @@ export function useDashboardWorkspace() {
           layouts: previous.layouts,
           pageId: candidatePage.id,
           type,
-          maxRows
+          maxRows,
+          strictBreakpoint
         });
         if (candidatePlacement) {
           targetPageId = candidatePage.id;
@@ -332,7 +339,8 @@ export function useDashboardWorkspace() {
           layouts: previous.layouts,
           pageId: nextPage.id,
           type,
-          maxRows
+          maxRows,
+          strictBreakpoint
         });
         targetPageId = nextPage.id;
       }
@@ -415,7 +423,7 @@ export function useDashboardWorkspace() {
     draggingWidgetIdRef.current = widgetId;
   }
 
-  function shiftDraggingWidgetPage(delta: -1 | 1, maxRows: number) {
+  function shiftDraggingWidgetPage(delta: -1 | 1, maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
     if (!draggingWidgetIdRef.current) {
       return;
     }
@@ -453,7 +461,7 @@ export function useDashboardWorkspace() {
         return previous;
       }
 
-      const moved = moveWidgetToPage(previous, draggingWidgetIdRef.current!, targetPage.id, maxRows);
+      const moved = moveWidgetToPage(previous, draggingWidgetIdRef.current!, targetPage.id, maxRows, strictBreakpoint);
 
       return {
         ...moved,
@@ -463,7 +471,7 @@ export function useDashboardWorkspace() {
     });
   }
 
-  function endWidgetDrag(maxRows: number) {
+  function endWidgetDrag(maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
     const draggingWidgetId = draggingWidgetIdRef.current;
     draggingWidgetIdRef.current = null;
 
@@ -474,10 +482,10 @@ export function useDashboardWorkspace() {
 
       let next = previous;
       if (draggingWidgetId) {
-        next = moveWidgetToPage(next, draggingWidgetId, next.currentPageId, maxRows);
+        next = moveWidgetToPage(next, draggingWidgetId, next.currentPageId, maxRows, strictBreakpoint);
       }
 
-      return sanitizeDashboardDocument(pruneEmptyPages(next, next.currentPageId), maxRows);
+      return sanitizeDashboardDocument(pruneEmptyPages(next, next.currentPageId), maxRows, strictBreakpoint);
     });
   }
 

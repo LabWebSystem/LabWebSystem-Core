@@ -443,10 +443,15 @@ export function normalizeDashboardLayout(document: unknown): DashboardLayoutDocu
   });
 }
 
-export function sanitizeDashboardDocument(document: DashboardLayoutDocument, maxRows: number): DashboardLayoutDocument {
+export function sanitizeDashboardDocument(
+  document: DashboardLayoutDocument,
+  maxRows: number,
+  strictBreakpoint?: DashboardBreakpoint
+): DashboardLayoutDocument {
   return sanitizeDashboardDocumentWithGuardrails({
     document,
     maxRows,
+    strictBreakpoint,
     createPage,
     ensureWidgetsHaveLayouts,
     renumberPages

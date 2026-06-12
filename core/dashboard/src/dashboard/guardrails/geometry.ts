@@ -45,14 +45,52 @@ export function findAvailablePosition(
   return null;
 }
 
+function findBestEffortPosition(
+  items: DashboardLayoutItemLike[],
+  breakpoint: DashboardBreakpoint,
+  size: WidgetSizing,
+  maxRows: number
+): { x: number; y: number } | null {
+  return (
+    findAvailablePosition(items, breakpoint, size, maxRows) ??
+    findAvailablePosition(
+      items,
+      breakpoint,
+      size,
+      Math.max(
+        maxRows,
+        items.reduce((bottom, item) => Math.max(bottom, item.y + item.h), 0) + size.h
+      )
+    )
+  );
+}
+
 export function findPlacementForWidget(context: DashboardPlacementContext): DashboardPlacement | null {
-  const { layouts, pageId, type, maxRows } = context;
+  const { layouts, pageId, type, maxRows, strictBreakpoint } = context;
   const placement = {} as DashboardPlacement;
 
-  for (const breakpoint of BREAKPOINT_KEYS) {
+  const strictBreakpoints = strictBreakpoint ? [strictBreakpoint] : BREAKPOINT_KEYS;
+
+  for (const breakpoint of strictBreakpoints) {
     const size = widgetSizing(type, breakpoint);
     const pageItems = layouts[breakpoint].filter((item) => item.pageId === pageId);
     const position = findAvailablePosition(pageItems, breakpoint, size, maxRows);
+
+    if (!position) {
+      return null;
+    }
+
+    placement[breakpoint] = position;
+  }
+
+  for (const breakpoint of BREAKPOINT_KEYS) {
+    if (placement[breakpoint]) {
+      continue;
+    }
+
+    const size = widgetSizing(type, breakpoint);
+    const pageItems = layouts[breakpoint].filter((item) => item.pageId === pageId);
+    const position = findBestEffortPosition(pageItems, breakpoint, size, maxRows);
 
     if (!position) {
       return null;
@@ -65,12 +103,29 @@ export function findPlacementForWidget(context: DashboardPlacementContext): Dash
 }
 
 export function findPlacementForSizedWidget(context: DashboardSizedPlacementContext): DashboardPlacement | null {
-  const { layouts, pageId, sizes, maxRows, excludeWidgetId } = context;
+  const { layouts, pageId, sizes, maxRows, excludeWidgetId, strictBreakpoint } = context;
   const placement = {} as DashboardPlacement;
 
-  for (const breakpoint of BREAKPOINT_KEYS) {
+  const strictBreakpoints = strictBreakpoint ? [strictBreakpoint] : BREAKPOINT_KEYS;
+
+  for (const breakpoint of strictBreakpoints) {
     const pageItems = layouts[breakpoint].filter((item) => item.pageId === pageId && item.i !== excludeWidgetId);
     const position = findAvailablePosition(pageItems, breakpoint, sizes[breakpoint], maxRows);
+
+    if (!position) {
+      return null;
+    }
+
+    placement[breakpoint] = position;
+  }
+
+  for (const breakpoint of BREAKPOINT_KEYS) {
+    if (placement[breakpoint]) {
+      continue;
+    }
+
+    const pageItems = layouts[breakpoint].filter((item) => item.pageId === pageId && item.i !== excludeWidgetId);
+    const position = findBestEffortPosition(pageItems, breakpoint, sizes[breakpoint], maxRows);
 
     if (!position) {
       return null;
@@ -169,11 +224,12 @@ function collectOverlapViolations(items: DashboardLayoutItem[], breakpoint: Dash
 }
 
 export function validateDashboardGeometry(context: DashboardGeometryValidationContext): DashboardGeometryViolation[] {
-  const { document, maxRows } = context;
+  const { document, maxRows, strictBreakpoint } = context;
   const widgetTypeById = new Map(document.widgets.map((widget) => [widget.id, widget.type]));
   const violations: DashboardGeometryViolation[] = [];
+  const breakpoints = strictBreakpoint ? [strictBreakpoint] : BREAKPOINT_KEYS;
 
-  for (const breakpoint of BREAKPOINT_KEYS) {
+  for (const breakpoint of breakpoints) {
     const items = document.layouts[breakpoint];
     for (const item of items) {
       const type = widgetTypeById.get(item.i);

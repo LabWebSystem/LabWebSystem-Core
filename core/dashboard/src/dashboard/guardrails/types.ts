@@ -64,6 +64,7 @@ export type DashboardLayoutFactory = {
 export type DashboardSanitizeContext = DashboardLayoutFactory & {
   document: DashboardLayoutDocument;
   maxRows: number;
+  strictBreakpoint?: DashboardBreakpoint;
 };
 
 export type DashboardStructureValidationContext = {
@@ -73,6 +74,7 @@ export type DashboardStructureValidationContext = {
 export type DashboardGeometryValidationContext = {
   document: DashboardLayoutDocument;
   maxRows: number;
+  strictBreakpoint?: DashboardBreakpoint;
 };
 
 export type DashboardPlacementContext = {
@@ -80,6 +82,7 @@ export type DashboardPlacementContext = {
   pageId: string;
   type: DashboardWidgetType;
   maxRows: number;
+  strictBreakpoint?: DashboardBreakpoint;
 };
 
 export type DashboardSizedPlacementContext = {
@@ -88,6 +91,7 @@ export type DashboardSizedPlacementContext = {
   sizes: DashboardWidgetSizes;
   maxRows: number;
   excludeWidgetId?: string;
+  strictBreakpoint?: DashboardBreakpoint;
 };
 
 export type DashboardSizedLayoutItemContext = {
