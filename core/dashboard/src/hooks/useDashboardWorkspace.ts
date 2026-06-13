@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+
 import { fetchDashboardLayout, saveDashboardLayout } from "../api";
 import {
   BREAKPOINT_KEYS,
@@ -8,24 +9,22 @@ import {
   USER_ID
 } from "../dashboard/constants";
 import {
-  findPlacementForSizedWidget,
-  findPlacementForWidget,
-  inspectDashboardGuardrails,
-  widgetSizesForDocument
-} from "../dashboard/guardrails";
+  addWidgetToDashboardDocument,
+  moveWidgetToPageInDashboardDocument
+} from "../dashboard/moduleAdapter";
 import {
   buildDefaultDashboardLayout,
-  cloneResponsiveLayouts,
-  layoutPreset,
-  mergeLayoutsForPage,
   normalizeDashboardLayout,
-  renumberPages,
   sanitizeDashboardDocument,
-  toRglLayouts,
-  widgetPreset
+  toRglLayouts
 } from "../dashboard/layout";
 import type { GridLayouts, SaveState } from "../dashboard/types";
-import type { DashboardBreakpoint, DashboardLayoutDocument, DashboardResponsiveLayouts, DashboardWidgetType } from "../types";
+import type {
+  DashboardBreakpoint,
+  DashboardLayoutDocument,
+  DashboardResponsiveLayouts,
+  DashboardWidgetType
+} from "../types";
 
 function createPage(index: number, isDraft = false) {
   return {
@@ -40,120 +39,40 @@ function pulsePageAnimation(setIsPageAnimating: (value: boolean) => void) {
   window.setTimeout(() => setIsPageAnimating(false), PAGE_ANIMATION_MS);
 }
 
-function widgetCountByPage(document: DashboardLayoutDocument) {
-  return document.pages.reduce<Record<string, number>>((accumulator, page) => {
-    accumulator[page.id] = document.widgets.filter((widget) => widget.pageId === page.id).length;
-    return accumulator;
-  }, {});
+function createEmptyLayouts(): DashboardResponsiveLayouts {
+  return Object.fromEntries(BREAKPOINT_KEYS.map((breakpoint) => [breakpoint, []])) as unknown as DashboardResponsiveLayouts;
 }
 
-function pruneEmptyPages(document: DashboardLayoutDocument, preferredCurrentPageId?: string): DashboardLayoutDocument {
-  const counts = widgetCountByPage(document);
-  const nonEmptyPages = document.pages.filter((page) => (counts[page.id] ?? 0) > 0);
-
-  if (nonEmptyPages.length === 0) {
-    const basePage = document.pages.find((page) => !page.isDraft) ?? document.pages[0] ?? createPage(0);
-    const pages = renumberPages([{ ...basePage, isDraft: false }]);
-    return {
-      ...document,
-      pages,
-      widgets: [],
-      layouts: Object.fromEntries(BREAKPOINT_KEYS.map((breakpoint) => [breakpoint, []])) as unknown as DashboardResponsiveLayouts,
-      currentPageId: pages[0].id
-    };
-  }
-
-  const pages = renumberPages(nonEmptyPages);
-  const pageIds = new Set(pages.map((page) => page.id));
-  const originalPages = document.pages;
-  const targetPageId =
-    (preferredCurrentPageId && pageIds.has(preferredCurrentPageId) && preferredCurrentPageId) ||
-    (pageIds.has(document.currentPageId) ? document.currentPageId : null);
-
-  const fallbackPage =
-    (targetPageId && pages.find((page) => page.id === targetPageId)) ||
-    pages.find((page) => {
-      const currentIndex = originalPages.findIndex((candidate) => candidate.id === (preferredCurrentPageId ?? document.currentPageId));
-      const candidateIndex = originalPages.findIndex((candidate) => candidate.id === page.id);
-      return candidateIndex >= Math.max(0, currentIndex);
-    }) ||
-    pages[0];
-
-  return {
-    ...document,
-    pages,
-    widgets: document.widgets.filter((widget) => pageIds.has(widget.pageId)),
-    layouts: Object.fromEntries(
-      BREAKPOINT_KEYS.map((breakpoint) => [
-        breakpoint,
-        document.layouts[breakpoint].filter((item) => pageIds.has(item.pageId) && document.widgets.some((widget) => widget.id === item.i))
-      ])
-    ) as DashboardResponsiveLayouts,
-    currentPageId: fallbackPage.id
-  };
-}
-
-function moveWidgetToPage(
-  document: DashboardLayoutDocument,
-  widgetId: string,
-  targetPageId: string,
-  maxRows: number,
-  strictBreakpoint?: DashboardBreakpoint
-): DashboardLayoutDocument {
-  const widget = document.widgets.find((candidate) => candidate.id === widgetId);
-  if (!widget || widget.pageId === targetPageId) {
-    return document;
-  }
-
-  const sizes = widgetSizesForDocument(document.layouts, widgetId, widget.type, maxRows);
-  const placement = findPlacementForSizedWidget({
-    layouts: document.layouts,
-    pageId: targetPageId,
-    sizes,
-    maxRows,
-    excludeWidgetId: widgetId,
-    strictBreakpoint
-  });
-
-  if (!placement) {
-    return document;
-  }
-
-  const widgets = document.widgets.map((candidate) =>
-    candidate.id === widgetId ? { ...candidate, pageId: targetPageId } : candidate
-  );
-
-  const layouts = Object.fromEntries(
+function mergeLayoutsForPage(
+  currentLayouts: DashboardResponsiveLayouts,
+  pageId: string,
+  nextLayouts: GridLayouts,
+  widgetIds: Set<string>
+): DashboardResponsiveLayouts {
+  return Object.fromEntries(
     BREAKPOINT_KEYS.map((breakpoint) => {
-      return [
-        breakpoint,
-        document.layouts[breakpoint].map((item) =>
-          item.i === widgetId
-            ? {
-                ...item,
-                pageId: targetPageId,
-                x: placement[breakpoint].x,
-                y: placement[breakpoint].y,
-                w: sizes[breakpoint].w,
-                h: sizes[breakpoint].h,
-                minW: sizes[breakpoint].minW,
-                minH: sizes[breakpoint].minH,
-                maxW: sizes[breakpoint].maxW,
-                maxH: sizes[breakpoint].maxH
-              }
-            : item
-        )
-      ];
+      const preserved = currentLayouts[breakpoint].filter((item) => item.pageId !== pageId);
+      const replacement = nextLayouts[breakpoint]
+        .filter((item) => widgetIds.has(item.i))
+        .map((item) => ({
+          i: item.i,
+          pageId,
+          x: item.x,
+          y: item.y,
+          w: item.w,
+          h: item.h,
+          minW: item.minW,
+          minH: item.minH,
+          maxW: item.maxW,
+          maxH: item.maxH,
+          static: item.static,
+          isDraggable: item.isDraggable,
+          isResizable: item.isResizable
+        }));
+
+      return [breakpoint, [...preserved, ...replacement]];
     })
   ) as DashboardResponsiveLayouts;
-
-  return {
-    ...document,
-    widgets,
-    layouts,
-    pages: document.pages.map((page) => (page.id === targetPageId ? { ...page, isDraft: false } : page)),
-    currentPageId: targetPageId
-  };
 }
 
 export function useDashboardWorkspace() {
@@ -267,37 +186,18 @@ export function useDashboardWorkspace() {
         return previous;
       }
 
-      return sanitizeDashboardDocument(
-        {
+      const pageWidgetIds = new Set(previous.widgets.filter((widget) => widget.pageId === currentPage.id).map((widget) => widget.id));
+      const merged = {
         ...previous,
-        layouts: mergeLayoutsForPage(previous.layouts, currentPage.id, nextLayouts, previous.widgets)
-        },
-        maxRows,
-        strictBreakpoint
-      );
+        layouts: mergeLayoutsForPage(previous.layouts, currentPage.id, nextLayouts, pageWidgetIds)
+      };
+
+      return sanitizeDashboardDocument(merged, maxRows, strictBreakpoint);
     });
   }
 
   function repairDashboard(maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
-    setDashboard((previous) => {
-      if (!previous) {
-        return previous;
-      }
-
-      const currentReport = inspectDashboardGuardrails(previous, maxRows, strictBreakpoint);
-      if (currentReport.structureViolations.length === 0 && currentReport.geometryViolations.length === 0) {
-        return previous;
-      }
-
-      const repaired = sanitizeDashboardDocument(previous, maxRows, strictBreakpoint);
-      const report = inspectDashboardGuardrails(repaired, maxRows, strictBreakpoint);
-
-      if (report.structureViolations.length > 0 || report.geometryViolations.length > 0) {
-        console.warn("Dashboard guardrails detected remaining violations after repair.", report);
-      }
-
-      return repaired;
-    });
+    setDashboard((previous) => (previous ? sanitizeDashboardDocument(previous, maxRows, strictBreakpoint) : previous));
   }
 
   function addWidget(type: DashboardWidgetType, maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
@@ -306,72 +206,17 @@ export function useDashboardWorkspace() {
         return previous;
       }
 
-      const currentIndex = previous.pages.findIndex((page) => page.id === previous.currentPageId);
-      const pageSearchStart = currentIndex >= 0 ? currentIndex : 0;
-      let pages = previous.pages;
-      let targetPageId: string | null = null;
-      let placement = null as ReturnType<typeof findPlacementForWidget>;
-
-      for (let index = pageSearchStart; index < pages.length; index += 1) {
-        const candidatePage = pages[index];
-        if (!candidatePage) {
-          continue;
-        }
-
-        const candidatePlacement = findPlacementForWidget({
-          layouts: previous.layouts,
-          pageId: candidatePage.id,
-          type,
-          maxRows,
-          strictBreakpoint
-        });
-        if (candidatePlacement) {
-          targetPageId = candidatePage.id;
-          placement = candidatePlacement;
-          break;
-        }
-      }
-
-      if (!targetPageId) {
-        const nextPage = createPage(pages.length);
-        pages = renumberPages([...pages, nextPage]);
-        placement = findPlacementForWidget({
-          layouts: previous.layouts,
-          pageId: nextPage.id,
-          type,
-          maxRows,
-          strictBreakpoint
-        });
-        targetPageId = nextPage.id;
-      }
-
-      if (!targetPageId || !placement) {
+      try {
+        return addWidgetToDashboardDocument(previous, type, maxRows, currentPageIndex, strictBreakpoint);
+      } catch {
         window.alert("現在の表示サイズでは、このウィジェットを配置できません。");
         return previous;
       }
-
-      const widget = widgetPreset(type, targetPageId);
-      const nextLayouts = cloneResponsiveLayouts(previous.layouts);
-
-      for (const breakpointKey of BREAKPOINT_KEYS) {
-        const layoutItem = layoutPreset(widget, breakpointKey, placement[breakpointKey].y);
-        layoutItem.x = placement[breakpointKey].x;
-        layoutItem.y = placement[breakpointKey].y;
-        nextLayouts[breakpointKey].push(layoutItem);
-      }
-
-      return {
-        ...previous,
-        pages,
-        widgets: [...previous.widgets, widget],
-        layouts: nextLayouts,
-        currentPageId: targetPageId
-      };
     });
     setWidgetPickerOpen(false);
   }
 
-  function deleteWidget(widgetId: string) {
+  function deleteWidget(widgetId: string, maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
     if (!window.confirm("このウィジェットを削除しますか？")) {
       return;
     }
@@ -392,7 +237,7 @@ export function useDashboardWorkspace() {
         ) as DashboardResponsiveLayouts
       };
 
-      return pruneEmptyPages(next);
+      return sanitizeDashboardDocument(next, maxRows, strictBreakpoint);
     });
   }
 
@@ -407,13 +252,13 @@ export function useDashboardWorkspace() {
       }
 
       const basePage = previous.pages.find((page) => !page.isDraft) ?? previous.pages[0] ?? createPage(0);
-      const pages = renumberPages([{ ...basePage, isDraft: false }]);
+      const pages = [{ ...basePage, title: "Page 1", isDraft: false }];
 
       return {
         ...previous,
         pages,
         widgets: [],
-        layouts: Object.fromEntries(BREAKPOINT_KEYS.map((breakpoint) => [breakpoint, []])) as unknown as DashboardResponsiveLayouts,
+        layouts: createEmptyLayouts(),
         currentPageId: pages[0].id
       };
     });
@@ -424,7 +269,8 @@ export function useDashboardWorkspace() {
   }
 
   function shiftDraggingWidgetPage(delta: -1 | 1, maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
-    if (!draggingWidgetIdRef.current) {
+    const draggingWidgetId = draggingWidgetIdRef.current;
+    if (!draggingWidgetId) {
       return;
     }
 
@@ -448,7 +294,7 @@ export function useDashboardWorkspace() {
           return previous;
         }
 
-        pages = renumberPages([...pages, createPage(pages.length, true)]);
+        pages = [...pages, createPage(pages.length, true)];
         targetIndex = pages.length - 1;
       }
 
@@ -461,7 +307,16 @@ export function useDashboardWorkspace() {
         return previous;
       }
 
-      const moved = moveWidgetToPage(previous, draggingWidgetIdRef.current!, targetPage.id, maxRows, strictBreakpoint);
+      const moved = moveWidgetToPageInDashboardDocument(
+        {
+          ...previous,
+          pages
+        },
+        draggingWidgetId,
+        targetPage.id,
+        maxRows,
+        strictBreakpoint
+      );
 
       return {
         ...moved,
@@ -472,21 +327,8 @@ export function useDashboardWorkspace() {
   }
 
   function endWidgetDrag(maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
-    const draggingWidgetId = draggingWidgetIdRef.current;
     draggingWidgetIdRef.current = null;
-
-    setDashboard((previous) => {
-      if (!previous) {
-        return previous;
-      }
-
-      let next = previous;
-      if (draggingWidgetId) {
-        next = moveWidgetToPage(next, draggingWidgetId, next.currentPageId, maxRows, strictBreakpoint);
-      }
-
-      return sanitizeDashboardDocument(pruneEmptyPages(next, next.currentPageId), maxRows, strictBreakpoint);
-    });
+    setDashboard((previous) => (previous ? sanitizeDashboardDocument(previous, maxRows, strictBreakpoint) : previous));
   }
 
   return {

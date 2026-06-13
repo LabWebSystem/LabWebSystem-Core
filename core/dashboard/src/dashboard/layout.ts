@@ -8,7 +8,7 @@ import type {
 } from "../types";
 import { BREAKPOINT_KEYS, COLS } from "./constants";
 import type { GridItemLayout, GridLayouts } from "./types";
-import { sanitizeDashboardDocument as sanitizeDashboardDocumentWithGuardrails } from "./guardrails";
+import { sanitizeDashboardDocument as sanitizeDashboardDocumentWithModule } from "./moduleAdapter";
 import { WIDGET_ORDER, widgetLabel, widgetSizing } from "./widgetDefinitions";
 
 type LegacyDashboardWidget = {
@@ -448,14 +448,7 @@ export function sanitizeDashboardDocument(
   maxRows: number,
   strictBreakpoint?: DashboardBreakpoint
 ): DashboardLayoutDocument {
-  return sanitizeDashboardDocumentWithGuardrails({
-    document,
-    maxRows,
-    strictBreakpoint,
-    createPage,
-    ensureWidgetsHaveLayouts,
-    renumberPages
-  });
+  return sanitizeDashboardDocumentWithModule(ensureWidgetsHaveLayouts(document), maxRows, strictBreakpoint);
 }
 
 export function findDisplayLayout(layouts: GridLayouts, breakpoint: DashboardBreakpoint, widgetId: string): GridItemLayout | null {

@@ -9,6 +9,7 @@ import {
   FaMicrochip
 } from "react-icons/fa6";
 import type { DashboardBreakpoint, DashboardWidgetType } from "../types";
+import { createWidgetDisplayContext } from "./gridModule/display";
 import type { GridItemLayout, WidgetDefinition, WidgetSizing, WidgetVisualMode } from "./types";
 
 export const WIDGET_ORDER: DashboardWidgetType[] = [
@@ -190,53 +191,16 @@ export function resolveWidgetMode(type: DashboardWidgetType, layout: GridItemLay
     return "standard";
   }
 
-  switch (type) {
-    case "status":
-      if (layout.w <= 6 || layout.h <= 3) {
-        return "compact";
-      }
-      if (layout.w >= 10 && layout.h >= 5) {
-        return "detail";
-      }
+  const { viewMode } = createWidgetDisplayContext(layout.w, layout.h);
+
+  switch (viewMode) {
+    case "icon":
+    case "compact":
+      return "compact";
+    case "summary":
       return "standard";
-    case "cpu":
-    case "memory":
-    case "disk":
-    case "network":
-      if (layout.w <= 2 || layout.h <= 3) {
-        return "compact";
-      }
-      if (layout.w >= 4 && layout.h >= 5) {
-        return "detail";
-      }
-      return "standard";
-    case "chart":
-      if (layout.h <= 4) {
-        return "compact";
-      }
-      if (layout.w >= 8 && layout.h >= 6) {
-        return "detail";
-      }
-      return "standard";
-    case "log":
-      if (layout.h <= 4) {
-        return "compact";
-      }
-      if (layout.w >= 8 && layout.h >= 7) {
-        return "detail";
-      }
-      return "standard";
-    case "alert":
-    case "applications":
-    case "jobs":
-    case "events":
-      if (layout.w <= 4 || layout.h <= 4) {
-        return "compact";
-      }
-      if (layout.w >= 8 && layout.h >= 6) {
-        return "detail";
-      }
-      return "standard";
+    case "full":
+      return "detail";
     default:
       return "standard";
   }

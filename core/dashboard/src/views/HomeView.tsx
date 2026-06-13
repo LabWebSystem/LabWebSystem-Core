@@ -29,9 +29,9 @@ import { DashboardWidgetRenderer } from "../widgets/dashboard/DashboardWidgetRen
 
 const ResponsiveGridLayout = WidthProvider(Responsive as any) as any;
 
-const PAGE_EDGE_THRESHOLD_PX = 96;
-const PAGE_EDGE_INITIAL_DELAY_MS = 420;
-const PAGE_EDGE_REPEAT_MS = 520;
+const PAGE_SWITCH_OUTSIDE_THRESHOLD_PX = 22;
+const PAGE_EDGE_INITIAL_DELAY_MS = 240;
+const PAGE_EDGE_REPEAT_MS = 240;
 const GRID_VERTICAL_CHROME = CONTAINER_PADDING[1] * 2 - GRID_MARGIN[1];
 
 type HomeViewProps = {
@@ -235,14 +235,12 @@ export function HomeView(props: HomeViewProps) {
       return;
     }
 
-    const offsetY = event.clientY - boundary.top;
-
-    if (offsetY <= PAGE_EDGE_THRESHOLD_PX) {
+    if (event.clientY <= boundary.top - PAGE_SWITCH_OUTSIDE_THRESHOLD_PX) {
       startDragEdgeNavigation(-1);
       return;
     }
 
-    if (offsetY >= boundary.height - PAGE_EDGE_THRESHOLD_PX) {
+    if (event.clientY >= boundary.bottom + PAGE_SWITCH_OUTSIDE_THRESHOLD_PX) {
       startDragEdgeNavigation(1);
       return;
     }
@@ -532,7 +530,7 @@ export function HomeView(props: HomeViewProps) {
                                   totalPages={dashboard.pages.length}
                                   breakpoint={breakpoint}
                                   editMode={editMode}
-                                  onDelete={deleteWidget}
+                                  onDelete={(widgetId) => deleteWidget(widgetId, maxRows, breakpoint)}
                                   system={system}
                                   applications={applications}
                                   jobs={jobs}
@@ -601,7 +599,7 @@ export function HomeView(props: HomeViewProps) {
                   totalPages={dashboard.pages.length}
                   breakpoint={breakpoint}
                   editMode={true}
-                  onDelete={deleteWidget}
+                  onDelete={(widgetId) => deleteWidget(widgetId, maxRows, breakpoint)}
                   system={system}
                   applications={applications}
                   jobs={jobs}
