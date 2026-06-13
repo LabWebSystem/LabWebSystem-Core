@@ -208,6 +208,14 @@ export function useDashboardWorkspace() {
       return;
     }
 
+    const signature = serializeDashboardLayout(dashboard);
+    if (signature === savedLayoutSignatureRef.current || inFlightLayoutSignaturesRef.current.has(signature)) {
+      if (signature === savedLayoutSignatureRef.current) {
+        setSaveState("saved");
+      }
+      return;
+    }
+
     if (saveTimerRef.current) {
       window.clearTimeout(saveTimerRef.current);
     }
