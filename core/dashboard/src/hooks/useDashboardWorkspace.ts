@@ -87,8 +87,10 @@ export function useDashboardWorkspace() {
   const [isLayoutInteracting, setIsLayoutInteracting] = useState(false);
   const [isPageAnimating, setIsPageAnimating] = useState(false);
   const loadedRef = useRef(false);
+  const dashboardRef = useRef<DashboardLayoutDocument | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   const draggingWidgetIdRef = useRef<string | null>(null);
+  const saveRequestIdRef = useRef(0);
 
   const currentPage = useMemo(() => {
     if (!dashboard) {
@@ -109,6 +111,40 @@ export function useDashboardWorkspace() {
     () => (dashboard && currentPage ? toRglLayouts(dashboard, currentPage.id) : EMPTY_GRID_LAYOUTS),
     [dashboard, currentPage]
   );
+
+  useEffect(() => {
+    dashboardRef.current = dashboard;
+  }, [dashboard]);
+
+  async function persistDashboard(layout: DashboardLayoutDocument) {
+    const requestId = ++saveRequestIdRef.current;
+    setSaveState("saving");
+
+    try {
+      await saveDashboardLayout(layout, DASHBOARD_ID, USER_ID);
+      if (requestId === saveRequestIdRef.current) {
+        setSaveState("saved");
+      }
+    } catch {
+      if (requestId === saveRequestIdRef.current) {
+        setSaveState("error");
+      }
+    }
+  }
+
+  function flushSaveNow(layout?: DashboardLayoutDocument | null) {
+    const nextLayout = layout ?? dashboardRef.current;
+    if (!nextLayout || !loadedRef.current) {
+      return;
+    }
+
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    void persistDashboard(nextLayout);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -147,10 +183,7 @@ export function useDashboardWorkspace() {
     }
 
     saveTimerRef.current = window.setTimeout(() => {
-      setSaveState("saving");
-      void saveDashboardLayout(dashboard, DASHBOARD_ID, USER_ID)
-        .then(() => setSaveState("saved"))
-        .catch(() => setSaveState("error"));
+      void persistDashboard(dashboard);
     }, 500);
 
     return () => {
@@ -159,6 +192,40 @@ export function useDashboardWorkspace() {
       }
     };
   }, [dashboard, isLayoutInteracting]);
+
+  useEffect(() => {
+    function sendBeaconSave() {
+      const layout = dashboardRef.current;
+      if (!layout || !loadedRef.current) {
+        return;
+      }
+
+      const body = JSON.stringify({
+        dashboardId: DASHBOARD_ID,
+        userId: USER_ID,
+        layout
+      });
+
+      navigator.sendBeacon(
+        `${window.location.origin}${import.meta.env.VITE_API_BASE_URL ?? ""}/api/system/dashboard-layout`,
+        new Blob([body], { type: "application/json" })
+      );
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "hidden") {
+        sendBeaconSave();
+      }
+    }
+
+    window.addEventListener("pagehide", sendBeaconSave);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("pagehide", sendBeaconSave);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   function changePage(nextPageIndex: number) {
     if (!dashboard) {
@@ -222,6 +289,9 @@ export function useDashboardWorkspace() {
     );
 
     setDashboard(applyResult.document);
+    if (applyResult.applied) {
+      flushSaveNow(applyResult.document);
+    }
     return applyResult;
   }
 
@@ -236,7 +306,9 @@ export function useDashboardWorkspace() {
       }
 
       try {
-        return addWidgetToDashboardDocument(previous, type, maxRows, currentPageIndex, strictBreakpoint);
+        const next = addWidgetToDashboardDocument(previous, type, maxRows, currentPageIndex, strictBreakpoint);
+        flushSaveNow(next);
+        return next;
       } catch {
         window.alert("現在の表示サイズでは、このウィジェットを配置できません。");
         return previous;
@@ -266,7 +338,9 @@ export function useDashboardWorkspace() {
         ) as DashboardResponsiveLayouts
       };
 
-      return sanitizeDashboardDocument(next, maxRows, strictBreakpoint);
+      const sanitized = sanitizeDashboardDocument(next, maxRows, strictBreakpoint);
+      flushSaveNow(sanitized);
+      return sanitized;
     });
   }
 
@@ -347,6 +421,8 @@ export function useDashboardWorkspace() {
         strictBreakpoint
       );
 
+      flushSaveNow(moved);
+
       return {
         ...moved,
         pages,
@@ -360,7 +436,15 @@ export function useDashboardWorkspace() {
     if (!shouldSanitize) {
       return;
     }
-    setDashboard((previous) => (previous ? sanitizeDashboardDocument(previous, maxRows, strictBreakpoint) : previous));
+    setDashboard((previous) => {
+      if (!previous) {
+        return previous;
+      }
+
+      const sanitized = sanitizeDashboardDocument(previous, maxRows, strictBreakpoint);
+      flushSaveNow(sanitized);
+      return sanitized;
+    });
   }
 
   return {
@@ -388,6 +472,7 @@ export function useDashboardWorkspace() {
     beginWidgetDrag,
     shiftDraggingWidgetPage,
     endWidgetDrag,
+    flushSaveNow,
     findWidgetLayout: (widgetId: string, targetBreakpoint: DashboardBreakpoint) =>
       dashboard ? findWidgetLayoutForBreakpoint(dashboard, widgetId, targetBreakpoint) : null
   };

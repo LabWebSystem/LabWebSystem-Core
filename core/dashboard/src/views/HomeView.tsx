@@ -260,6 +260,7 @@ export function HomeView(props: HomeViewProps) {
     beginWidgetDrag,
     shiftDraggingWidgetPage,
     endWidgetDrag,
+    flushSaveNow,
     findWidgetLayout
   } = useDashboardWorkspace();
 
@@ -309,6 +310,7 @@ export function HomeView(props: HomeViewProps) {
       return setEditMode(true);
     }
 
+    flushSaveNow();
     endWidgetDrag(maxRows, breakpoint, true);
     setEditMode(false);
   }
@@ -766,12 +768,10 @@ export function HomeView(props: HomeViewProps) {
                                         <div className="widget-resize-handle absolute -right-1 -top-1 z-10 h-3.5 w-3.5 cursor-ne-resize" data-resize-direction="ne" />
                                         <div className="widget-resize-handle absolute -left-1 -bottom-1 z-10 h-3.5 w-3.5 cursor-sw-resize" data-resize-direction="sw" />
                                         <div className="widget-resize-handle absolute -right-1 -bottom-1 z-10 h-3.5 w-3.5 cursor-se-resize" data-resize-direction="se" />
-                                        <div className="pointer-events-none absolute bottom-2 right-2 z-10 flex h-7 w-7 items-end justify-end rounded-full bg-white/92 p-1 shadow-[0_12px_28px_-18px_rgba(15,23,42,0.75)] ring-1 ring-slate-200/80">
-                                          <div className="relative h-3.5 w-3.5 text-violet-500">
-                                            <span className="absolute bottom-0 right-0 block h-0.5 w-3.5 rotate-[-45deg] rounded-full bg-current" />
-                                            <span className="absolute bottom-[0.3rem] right-[0.18rem] block h-0.5 w-2.5 rotate-[-45deg] rounded-full bg-current opacity-80" />
-                                            <span className="absolute bottom-[0.6rem] right-[0.36rem] block h-0.5 w-1.5 rotate-[-45deg] rounded-full bg-current opacity-60" />
-                                          </div>
+                                        <div className="pointer-events-none absolute bottom-2 right-2 z-10 h-4 w-4 text-violet-500">
+                                          <span className="absolute bottom-0 right-0 block h-0.5 w-4 rotate-[-45deg] rounded-full bg-current" />
+                                          <span className="absolute bottom-[0.35rem] right-[0.18rem] block h-0.5 w-2.75 rotate-[-45deg] rounded-full bg-current opacity-80" />
+                                          <span className="absolute bottom-[0.7rem] right-[0.36rem] block h-0.5 w-1.5 rotate-[-45deg] rounded-full bg-current opacity-65" />
                                         </div>
                                       </>
                                     ) : null}
