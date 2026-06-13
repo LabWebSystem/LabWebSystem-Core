@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { fetchDashboardLayout, saveDashboardLayout } from "../api";
 import {
@@ -46,6 +46,17 @@ function createEmptyLayouts(): DashboardResponsiveLayouts {
   return Object.fromEntries(BREAKPOINT_KEYS.map((breakpoint) => [breakpoint, []])) as unknown as DashboardResponsiveLayouts;
 }
 
+function serializeDashboardLayout(layout: DashboardLayoutDocument): string {
+  return JSON.stringify(layout);
+}
+
+function preserveDashboardIdentity(
+  previous: DashboardLayoutDocument,
+  next: DashboardLayoutDocument
+): DashboardLayoutDocument {
+  return serializeDashboardLayout(previous) === serializeDashboardLayout(next) ? previous : next;
+}
+
 function mergeLayoutsForPage(
   currentLayouts: DashboardResponsiveLayouts,
   pageId: string,
@@ -91,6 +102,8 @@ export function useDashboardWorkspace() {
   const saveTimerRef = useRef<number | null>(null);
   const draggingWidgetIdRef = useRef<string | null>(null);
   const saveRequestIdRef = useRef(0);
+  const savedLayoutSignatureRef = useRef<string | null>(null);
+  const inFlightLayoutSignaturesRef = useRef(new Set<string>());
 
   const currentPage = useMemo(() => {
     if (!dashboard) {
@@ -116,12 +129,22 @@ export function useDashboardWorkspace() {
     dashboardRef.current = dashboard;
   }, [dashboard]);
 
-  async function persistDashboard(layout: DashboardLayoutDocument) {
+  const persistDashboard = useCallback(async (layout: DashboardLayoutDocument) => {
+    const signature = serializeDashboardLayout(layout);
+    if (signature === savedLayoutSignatureRef.current || inFlightLayoutSignaturesRef.current.has(signature)) {
+      if (signature === savedLayoutSignatureRef.current) {
+        setSaveState("saved");
+      }
+      return;
+    }
+
     const requestId = ++saveRequestIdRef.current;
+    inFlightLayoutSignaturesRef.current.add(signature);
     setSaveState("saving");
 
     try {
       await saveDashboardLayout(layout, DASHBOARD_ID, USER_ID);
+      savedLayoutSignatureRef.current = signature;
       if (requestId === saveRequestIdRef.current) {
         setSaveState("saved");
       }
@@ -129,10 +152,12 @@ export function useDashboardWorkspace() {
       if (requestId === saveRequestIdRef.current) {
         setSaveState("error");
       }
+    } finally {
+      inFlightLayoutSignaturesRef.current.delete(signature);
     }
-  }
+  }, []);
 
-  function flushSaveNow(layout?: DashboardLayoutDocument | null) {
+  const flushSaveNow = useCallback((layout?: DashboardLayoutDocument | null) => {
     const nextLayout = layout ?? dashboardRef.current;
     if (!nextLayout || !loadedRef.current) {
       return;
@@ -144,7 +169,7 @@ export function useDashboardWorkspace() {
     }
 
     void persistDashboard(nextLayout);
-  }
+  }, [persistDashboard]);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,13 +180,18 @@ export function useDashboardWorkspace() {
         if (cancelled) {
           return;
         }
-        setDashboard(normalizeDashboardLayout(layoutResponse.layout ?? buildDefaultDashboardLayout()));
+        const nextDashboard = normalizeDashboardLayout(layoutResponse.layout ?? buildDefaultDashboardLayout());
+        setDashboard(nextDashboard);
+        savedLayoutSignatureRef.current = layoutResponse.layout ? serializeDashboardLayout(nextDashboard) : null;
+        setSaveState(layoutResponse.layout ? "saved" : "idle");
         loadedRef.current = true;
       } catch {
         if (cancelled) {
           return;
         }
         setDashboard(buildDefaultDashboardLayout());
+        savedLayoutSignatureRef.current = null;
+        setSaveState("idle");
         loadedRef.current = true;
       }
     }
@@ -191,12 +221,17 @@ export function useDashboardWorkspace() {
         window.clearTimeout(saveTimerRef.current);
       }
     };
-  }, [dashboard, isLayoutInteracting]);
+  }, [dashboard, isLayoutInteracting, persistDashboard]);
 
   useEffect(() => {
     function sendBeaconSave() {
       const layout = dashboardRef.current;
       if (!layout || !loadedRef.current) {
+        return;
+      }
+
+      const signature = serializeDashboardLayout(layout);
+      if (signature === savedLayoutSignatureRef.current || inFlightLayoutSignaturesRef.current.has(signature)) {
         return;
       }
 
@@ -227,7 +262,7 @@ export function useDashboardWorkspace() {
     };
   }, []);
 
-  function changePage(nextPageIndex: number) {
+  const changePage = useCallback((nextPageIndex: number) => {
     if (!dashboard) {
       return;
     }
@@ -248,9 +283,9 @@ export function useDashboardWorkspace() {
 
     pulsePageAnimation(setIsPageAnimating);
     setDashboard((previous) => (previous ? { ...previous, currentPageId: nextPage.id } : previous));
-  }
+  }, [currentPageIndex, dashboard, isLayoutInteracting, isPageAnimating]);
 
-  function updateLayouts(nextLayouts: GridLayouts, maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
+  const updateLayouts = useCallback((nextLayouts: GridLayouts, maxRows: number, strictBreakpoint?: DashboardBreakpoint) => {
     setDashboard((previous) => {
       if (!previous || !currentPage) {
         return previous;
@@ -262,17 +297,18 @@ export function useDashboardWorkspace() {
         layouts: mergeLayoutsForPage(previous.layouts, currentPage.id, nextLayouts, pageWidgetIds)
       };
 
-      return sanitizeDashboardDocument(merged, maxRows, strictBreakpoint);
+      return preserveDashboardIdentity(previous, sanitizeDashboardDocument(merged, maxRows, strictBreakpoint));
     });
-  }
+  }, [currentPage]);
 
-  function applyWidgetRect(
+  const applyWidgetRect = useCallback((
     widgetId: string,
     rect: Pick<GridLayouts[DashboardBreakpoint][number], "x" | "y" | "w" | "h">,
     maxRows: number,
     strictBreakpoint?: DashboardBreakpoint
-  ): WidgetRectApplyResult {
-    if (!dashboard) {
+  ): WidgetRectApplyResult => {
+    const currentDashboard = dashboardRef.current;
+    if (!currentDashboard) {
       return {
         document: buildDefaultDashboardLayout(),
         applied: false,
@@ -281,25 +317,35 @@ export function useDashboardWorkspace() {
     }
 
     const applyResult = tryApplyWidgetRectOnDashboardDocument(
-      dashboard,
+      currentDashboard,
       widgetId,
       rect,
       maxRows,
       strictBreakpoint
     );
 
-    setDashboard(applyResult.document);
-    if (applyResult.applied) {
-      flushSaveNow(applyResult.document);
+    const nextDocument = preserveDashboardIdentity(currentDashboard, applyResult.document);
+    setDashboard(nextDocument);
+    if (applyResult.applied && nextDocument !== currentDashboard) {
+      flushSaveNow(nextDocument);
     }
-    return applyResult;
-  }
+    return {
+      ...applyResult,
+      document: nextDocument
+    };
+  }, [flushSaveNow]);
 
-  function repairDashboard(maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
-    setDashboard((previous) => (previous ? sanitizeDashboardDocument(previous, maxRows, strictBreakpoint) : previous));
-  }
+  const repairDashboard = useCallback((maxRows: number, strictBreakpoint?: DashboardBreakpoint) => {
+    setDashboard((previous) => {
+      if (!previous) {
+        return previous;
+      }
 
-  function addWidget(type: DashboardWidgetType, maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
+      return preserveDashboardIdentity(previous, sanitizeDashboardDocument(previous, maxRows, strictBreakpoint));
+    });
+  }, []);
+
+  const addWidget = useCallback((type: DashboardWidgetType, maxRows: number, strictBreakpoint?: DashboardBreakpoint) => {
     setDashboard((previous) => {
       if (!previous) {
         return previous;
@@ -315,9 +361,9 @@ export function useDashboardWorkspace() {
       }
     });
     setWidgetPickerOpen(false);
-  }
+  }, [currentPageIndex, flushSaveNow]);
 
-  function deleteWidget(widgetId: string, maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
+  const deleteWidget = useCallback((widgetId: string, maxRows: number, strictBreakpoint?: DashboardBreakpoint) => {
     if (!window.confirm("このウィジェットを削除しますか？")) {
       return;
     }
@@ -339,12 +385,15 @@ export function useDashboardWorkspace() {
       };
 
       const sanitized = sanitizeDashboardDocument(next, maxRows, strictBreakpoint);
-      flushSaveNow(sanitized);
-      return sanitized;
+      const resolved = preserveDashboardIdentity(previous, sanitized);
+      if (resolved !== previous) {
+        flushSaveNow(resolved);
+      }
+      return resolved;
     });
-  }
+  }, [flushSaveNow]);
 
-  function clearAllWidgets() {
+  const clearAllWidgets = useCallback(() => {
     if (!window.confirm("すべてのウィジェットを削除しますか？この操作は元に戻せません。")) {
       return;
     }
@@ -365,13 +414,13 @@ export function useDashboardWorkspace() {
         currentPageId: pages[0].id
       };
     });
-  }
+  }, []);
 
-  function beginWidgetDrag(widgetId: string) {
+  const beginWidgetDrag = useCallback((widgetId: string) => {
     draggingWidgetIdRef.current = widgetId;
-  }
+  }, []);
 
-  function shiftDraggingWidgetPage(delta: -1 | 1, maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
+  const shiftDraggingWidgetPage = useCallback((delta: -1 | 1, maxRows: number, strictBreakpoint?: DashboardBreakpoint) => {
     const draggingWidgetId = draggingWidgetIdRef.current;
     if (!draggingWidgetId) {
       return;
@@ -429,9 +478,9 @@ export function useDashboardWorkspace() {
         currentPageId: targetPage.id
       };
     });
-  }
+  }, [flushSaveNow]);
 
-  function endWidgetDrag(maxRows: number, strictBreakpoint?: DashboardBreakpoint, shouldSanitize = true) {
+  const endWidgetDrag = useCallback((maxRows: number, strictBreakpoint?: DashboardBreakpoint, shouldSanitize = true) => {
     draggingWidgetIdRef.current = null;
     if (!shouldSanitize) {
       return;
@@ -442,10 +491,13 @@ export function useDashboardWorkspace() {
       }
 
       const sanitized = sanitizeDashboardDocument(previous, maxRows, strictBreakpoint);
-      flushSaveNow(sanitized);
-      return sanitized;
+      const resolved = preserveDashboardIdentity(previous, sanitized);
+      if (resolved !== previous) {
+        flushSaveNow(resolved);
+      }
+      return resolved;
     });
-  }
+  }, [flushSaveNow]);
 
   return {
     dashboard,
