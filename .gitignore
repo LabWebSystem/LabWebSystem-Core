@@ -14,3 +14,5 @@ core/backend/data/*.db
 core/backend/data/generated/
 archive/extracted/
 runtime/
+temp/
+tsconfig.tsbuildinfo
