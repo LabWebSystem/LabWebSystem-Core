@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FaPlus } from "react-icons/fa6";
 
@@ -88,6 +88,29 @@ type ToastItem = {
   message: string;
   tone: ToastTone;
 };
+
+function layoutViolatesGrid(layout: GridItemLayout, breakpoint: DashboardBreakpoint, maxRows: number): boolean {
+  const cols = COLS[breakpoint];
+  const minW = layout.minW ?? 1;
+  const minH = layout.minH ?? 1;
+  const maxW = layout.maxW ?? cols;
+  const maxH = layout.maxH ?? maxRows;
+
+  return (
+    layout.x < 0 ||
+    layout.y < 0 ||
+    layout.w < minW ||
+    layout.h < minH ||
+    layout.w > Math.min(maxW, cols) ||
+    layout.h > Math.min(maxH, maxRows) ||
+    layout.x + layout.w > cols ||
+    layout.y + layout.h > maxRows
+  );
+}
+
+function layoutsNeedRepair(layouts: GridLayouts, breakpoint: DashboardBreakpoint, maxRows: number): boolean {
+  return layouts[breakpoint].some((layout) => layoutViolatesGrid(layout, breakpoint, maxRows));
+}
 
 function resolveBreakpoint(width: number): DashboardBreakpoint {
   if (width >= BREAKPOINTS.lg) {
@@ -225,9 +248,10 @@ export function HomeView(props: HomeViewProps) {
   const interactionRef = useRef<InteractionState | null>(null);
   const frameSizeRef = useRef<FrameSize>({ width: 0, height: 0 });
   const breakpointRef = useRef<DashboardBreakpoint>("lg");
-  const maxRowsRef = useRef(1);
+  const maxRowsRef = useRef(0);
+  const previousEditModeRef = useRef(false);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
-  const [maxRows, setMaxRows] = useState(1);
+  const [maxRows, setMaxRows] = useState(0);
   const [frameSize, setFrameSize] = useState<FrameSize>({ width: 0, height: 0 });
   const [dragPreview, setDragPreview] = useState<DragPreviewState | null>(null);
   const [interaction, setInteraction] = useState<InteractionState | null>(null);
@@ -265,6 +289,8 @@ export function HomeView(props: HomeViewProps) {
   } = useDashboardWorkspace();
 
   const gridMetrics = buildGridMetrics(frameSize, breakpoint);
+  const gridReady = maxRows > 0;
+  const currentPageNeedsRepair = gridReady ? layoutsNeedRepair(currentLayouts, breakpoint, maxRows) : false;
 
   useEffect(() => {
     interactionRef.current = interaction;
@@ -283,14 +309,17 @@ export function HomeView(props: HomeViewProps) {
   }, [maxRows]);
 
   useEffect(() => {
-    if (!dashboard || maxRows < 1 || isLayoutInteracting) {
+    if (!dashboard || !gridReady || isLayoutInteracting || !currentPageNeedsRepair) {
       return;
     }
 
     repairDashboard(maxRows, breakpoint);
-  }, [dashboard?.currentPageId, maxRows, breakpoint, isLayoutInteracting, repairDashboard]);
+  }, [dashboard?.currentPageId, gridReady, currentPageNeedsRepair, maxRows, breakpoint, isLayoutInteracting, repairDashboard]);
 
   useEffect(() => {
+    const wasEditMode = previousEditModeRef.current;
+    previousEditModeRef.current = editMode;
+
     if (editMode) {
       return;
     }
@@ -301,17 +330,47 @@ export function HomeView(props: HomeViewProps) {
     setInteraction(null);
     setIsLayoutInteracting(false);
     setDragPreview(null);
-    endWidgetDrag(maxRows, breakpoint);
-  }, [editMode, maxRows, breakpoint, endWidgetDrag, setIsLayoutInteracting]);
 
-  function toggleEditMode() {
-    if (!editMode) {
-      repairDashboard(maxRows, breakpoint);
-      return setEditMode(true);
+    if (!wasEditMode) {
+      return;
+    }
+
+    if (!gridReady) {
+      flushSaveNow();
+      return;
+    }
+
+    if (currentPageNeedsRepair) {
+      endWidgetDrag(maxRows, breakpoint);
+      return;
     }
 
     flushSaveNow();
-    endWidgetDrag(maxRows, breakpoint, true);
+  }, [
+    breakpoint,
+    currentPageNeedsRepair,
+    editMode,
+    endWidgetDrag,
+    flushSaveNow,
+    gridReady,
+    maxRows,
+    setIsLayoutInteracting
+  ]);
+
+  function toggleEditMode() {
+    if (!editMode) {
+      if (!gridReady) {
+        pushToast("ダッシュボードの描画準備が完了するまで少し待ってください。", "error");
+        return;
+      }
+
+      if (currentPageNeedsRepair) {
+        repairDashboard(maxRows, breakpoint);
+      }
+      setEditMode(true);
+      return;
+    }
+
     setEditMode(false);
   }
 
@@ -375,7 +434,7 @@ export function HomeView(props: HomeViewProps) {
     clearDragEdgeNavigation();
   }
 
-  function handleWheel(event: React.WheelEvent<HTMLDivElement>) {
+  const handleWheel = useCallback((event: WheelEvent) => {
     if (!dashboard || isLayoutInteracting || isPageAnimating || Math.abs(event.deltaY) < 24) {
       return;
     }
@@ -388,7 +447,7 @@ export function HomeView(props: HomeViewProps) {
 
     event.preventDefault();
     changePage(currentPageIndex + (event.deltaY > 0 ? 1 : -1));
-  }
+  }, [changePage, currentPageIndex, dashboard, isLayoutInteracting, isPageAnimating]);
 
   function handleTouchStart(event: React.TouchEvent<HTMLDivElement>) {
     setTouchStartY(event.touches[0]?.clientY ?? null);
@@ -517,6 +576,20 @@ export function HomeView(props: HomeViewProps) {
   }, [interaction, applyWidgetRect, endWidgetDrag, setIsLayoutInteracting]);
 
   useEffect(() => {
+    const element = rootRef.current;
+
+    if (!element) {
+      return;
+    }
+
+    element.addEventListener("wheel", handleWheel, { passive: false });
+
+    return () => {
+      element.removeEventListener("wheel", handleWheel);
+    };
+  }, [handleWheel]);
+
+  useEffect(() => {
     const element = currentGridFrameRef.current;
 
     if (!element) {
@@ -526,11 +599,12 @@ export function HomeView(props: HomeViewProps) {
     const updateMeasurements = () => {
       const width = element.clientWidth;
       const height = element.clientHeight;
-      const nextRows = Math.max(1, Math.floor((height - GRID_VERTICAL_CHROME) / (ROW_HEIGHT + GRID_MARGIN[1])));
 
       setFrameSize({ width, height });
-      setMaxRows(nextRows);
       setBreakpoint(resolveBreakpoint(width));
+
+      const nextRows = Math.floor((height - GRID_VERTICAL_CHROME) / (ROW_HEIGHT + GRID_MARGIN[1]));
+      setMaxRows(nextRows > 0 ? nextRows : 0);
     };
 
     updateMeasurements();
@@ -673,7 +747,6 @@ export function HomeView(props: HomeViewProps) {
         <div
           ref={rootRef}
           className="relative min-h-0 flex-1 overflow-hidden outline-none"
-          onWheel={handleWheel}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
           onKeyDown={handleKeyDown}
