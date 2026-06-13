@@ -10,10 +10,11 @@ import {
 } from "../dashboard/constants";
 import {
   addWidgetToDashboardDocument,
-  applyWidgetRectOnDashboardDocument,
   findWidgetLayoutForBreakpoint,
-  moveWidgetToPageInDashboardDocument
+  moveWidgetToPageInDashboardDocument,
+  tryApplyWidgetRectOnDashboardDocument
 } from "../dashboard/moduleAdapter";
+import type { WidgetRectApplyResult } from "../dashboard/moduleAdapter";
 import {
   buildDefaultDashboardLayout,
   normalizeDashboardLayout,
@@ -203,10 +204,25 @@ export function useDashboardWorkspace() {
     rect: Pick<GridLayouts[DashboardBreakpoint][number], "x" | "y" | "w" | "h">,
     maxRows: number,
     strictBreakpoint?: DashboardBreakpoint
-  ) {
-    setDashboard((previous) =>
-      previous ? applyWidgetRectOnDashboardDocument(previous, widgetId, rect, maxRows, strictBreakpoint) : previous
+  ): WidgetRectApplyResult {
+    if (!dashboard) {
+      return {
+        document: buildDefaultDashboardLayout(),
+        applied: false,
+        reason: "not-found"
+      };
+    }
+
+    const applyResult = tryApplyWidgetRectOnDashboardDocument(
+      dashboard,
+      widgetId,
+      rect,
+      maxRows,
+      strictBreakpoint
     );
+
+    setDashboard(applyResult.document);
+    return applyResult;
   }
 
   function repairDashboard(maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
@@ -339,8 +355,11 @@ export function useDashboardWorkspace() {
     });
   }
 
-  function endWidgetDrag(maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
+  function endWidgetDrag(maxRows: number, strictBreakpoint?: DashboardBreakpoint, shouldSanitize = true) {
     draggingWidgetIdRef.current = null;
+    if (!shouldSanitize) {
+      return;
+    }
     setDashboard((previous) => (previous ? sanitizeDashboardDocument(previous, maxRows, strictBreakpoint) : previous));
   }
 

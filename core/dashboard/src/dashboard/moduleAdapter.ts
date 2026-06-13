@@ -13,6 +13,12 @@ import { findFreeSpace, isRectFree } from "./gridModule/collision";
 import type { Rect, WidgetLayout as ModuleWidgetLayout, WidgetTemplate } from "./gridModule/types";
 import { widgetLabel, widgetSizing } from "./widgetDefinitions";
 
+export type WidgetRectApplyResult = {
+  document: DashboardLayoutDocument;
+  applied: boolean;
+  reason?: "collision" | "invalid-state" | "not-found";
+};
+
 type SharedPlacement = {
   page: number;
   positions: Record<DashboardBreakpoint, Rect>;
@@ -583,24 +589,32 @@ export function moveWidgetToPageInDashboardDocument(
   };
 }
 
-export function applyWidgetRectOnDashboardDocument(
+export function tryApplyWidgetRectOnDashboardDocument(
   document: DashboardLayoutDocument,
   widgetId: string,
   rect: Pick<DashboardLayoutItem, "x" | "y" | "w" | "h">,
   maxRows: number,
   strictBreakpoint?: DashboardBreakpoint
-): DashboardLayoutDocument {
+): WidgetRectApplyResult {
   const widget = document.widgets.find((candidate) => candidate.id === widgetId);
   const primaryBreakpoint = strictBreakpoint ?? "lg";
 
   if (!widget) {
-    return document;
+    return {
+      document,
+      applied: false,
+      reason: "not-found"
+    };
   }
 
   const pageWidgets = document.widgets.filter((candidate) => candidate.pageId === widget.pageId);
   const pageIndex = document.pages.findIndex((page) => page.id === widget.pageId);
   if (pageIndex < 0) {
-    return document;
+    return {
+      document,
+      applied: false,
+      reason: "not-found"
+    };
   }
 
   const layouts = pageWidgets.flatMap((candidate) => {
@@ -616,23 +630,37 @@ export function applyWidgetRectOnDashboardDocument(
     ];
   });
 
-  const engine = GridDashboardEngine.create({
-    grid: { cols: COLS[primaryBreakpoint], rows: Math.max(1, maxRows) },
-    widgets: layouts,
-    mode: "edit",
-    collisionMode: "make-room-adjacent"
-  });
+  let result: ReturnType<GridDashboardEngine["moveWidget"]>;
 
-  const result = engine.moveWidget(widgetId, {
-    page: 0,
-    x: rect.x,
-    y: rect.y,
-    w: rect.w,
-    h: rect.h
-  });
+  try {
+    const engine = GridDashboardEngine.create({
+      grid: { cols: COLS[primaryBreakpoint], rows: Math.max(1, maxRows) },
+      widgets: layouts,
+      mode: "edit",
+      collisionMode: "make-room-adjacent"
+    });
+
+    result = engine.moveWidget(widgetId, {
+      page: 0,
+      x: rect.x,
+      y: rect.y,
+      w: rect.w,
+      h: rect.h
+    });
+  } catch {
+    return {
+      document,
+      applied: false,
+      reason: "invalid-state"
+    };
+  }
 
   if (result.status !== "accepted") {
-    return document;
+    return {
+      document,
+      applied: false,
+      reason: "collision"
+    };
   }
 
   const nextLayoutsForBreakpoint = [
@@ -648,7 +676,20 @@ export function applyWidgetRectOnDashboardDocument(
     }
   };
 
-  return sanitizeDashboardDocument(nextDocument, maxRows, primaryBreakpoint);
+  return {
+    document: sanitizeDashboardDocument(nextDocument, maxRows, primaryBreakpoint),
+    applied: true
+  };
+}
+
+export function applyWidgetRectOnDashboardDocument(
+  document: DashboardLayoutDocument,
+  widgetId: string,
+  rect: Pick<DashboardLayoutItem, "x" | "y" | "w" | "h">,
+  maxRows: number,
+  strictBreakpoint?: DashboardBreakpoint
+): DashboardLayoutDocument {
+  return tryApplyWidgetRectOnDashboardDocument(document, widgetId, rect, maxRows, strictBreakpoint).document;
 }
 
 export function findWidgetLayoutForBreakpoint(

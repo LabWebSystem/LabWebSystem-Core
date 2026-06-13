@@ -76,6 +76,17 @@ type InteractionState = {
   offsetY: number;
   startClientX: number;
   startClientY: number;
+  resizeDirection?: ResizeDirection;
+};
+
+type ResizeDirection = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+
+type ToastTone = "success" | "error";
+
+type ToastItem = {
+  id: string;
+  message: string;
+  tone: ToastTone;
 };
 
 function resolveBreakpoint(width: number): DashboardBreakpoint {
@@ -175,12 +186,29 @@ function resolveResizeLayout(
   const deltaCols = Math.round((pointer.clientX - interaction.startClientX) / metrics.unitWidth);
   const deltaRows = Math.round((pointer.clientY - interaction.startClientY) / metrics.unitHeight);
 
+  const direction = interaction.resizeDirection ?? "se";
+  const next = { ...interaction.startLayout };
+
+  if (direction.includes("e")) {
+    next.w = interaction.startLayout.w + deltaCols;
+  }
+
+  if (direction.includes("s")) {
+    next.h = interaction.startLayout.h + deltaRows;
+  }
+
+  if (direction.includes("w")) {
+    next.x = interaction.startLayout.x + deltaCols;
+    next.w = interaction.startLayout.w - deltaCols;
+  }
+
+  if (direction.includes("n")) {
+    next.y = interaction.startLayout.y + deltaRows;
+    next.h = interaction.startLayout.h - deltaRows;
+  }
+
   return clampLayoutToGrid(
-    {
-      ...interaction.startLayout,
-      w: interaction.startLayout.w + deltaCols,
-      h: interaction.startLayout.h + deltaRows
-    },
+    next,
     breakpoint,
     maxRows
   );
@@ -203,6 +231,7 @@ export function HomeView(props: HomeViewProps) {
   const [frameSize, setFrameSize] = useState<FrameSize>({ width: 0, height: 0 });
   const [dragPreview, setDragPreview] = useState<DragPreviewState | null>(null);
   const [interaction, setInteraction] = useState<InteractionState | null>(null);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const { metrics, metricsHistory } = useDashboardMetrics();
   const { logWidget, logSourceOptions, setApplicationId, setSelectedService } = useDashboardLogWidget(applications);
@@ -265,6 +294,7 @@ export function HomeView(props: HomeViewProps) {
       return;
     }
 
+    setWidgetPickerOpen(false);
     clearDragEdgeNavigation();
     interactionRef.current = null;
     setInteraction(null);
@@ -276,9 +306,19 @@ export function HomeView(props: HomeViewProps) {
   function toggleEditMode() {
     if (!editMode) {
       repairDashboard(maxRows, breakpoint);
+      return setEditMode(true);
     }
 
-    setEditMode((previous) => !previous);
+    endWidgetDrag(maxRows, breakpoint, true);
+    setEditMode(false);
+  }
+
+  function pushToast(message: string, tone: ToastTone = "error") {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setToasts((previous) => [...previous, { id, message, tone }]);
+    window.setTimeout(() => {
+      setToasts((previous) => previous.filter((toast) => toast.id !== id));
+    }, 2800);
   }
 
   function clearDragEdgeNavigation() {
@@ -389,14 +429,17 @@ export function HomeView(props: HomeViewProps) {
     clearDragEdgeNavigation();
 
     if (active) {
-      applyWidgetRect(active.widgetId, active.draftLayout, maxRowsRef.current, breakpointRef.current);
+      const result = applyWidgetRect(active.widgetId, active.draftLayout, maxRowsRef.current, breakpointRef.current);
+      if (!result.applied) {
+        pushToast("重ねて配置することはできません。別の位置へ配置してください。", "error");
+      }
     }
 
     interactionRef.current = null;
     setInteraction(null);
     setIsLayoutInteracting(false);
     setDragPreview(null);
-    endWidgetDrag(maxRowsRef.current, breakpointRef.current);
+    endWidgetDrag(maxRowsRef.current, breakpointRef.current, false);
   }
 
   useEffect(() => {
@@ -519,6 +562,7 @@ export function HomeView(props: HomeViewProps) {
     const resizeHandle = target.closest(".widget-resize-handle");
     const dragHandle = target.closest(".widget-drag-handle");
     const actionButton = target.closest("button");
+    const resizeDirection = resizeHandle?.getAttribute("data-resize-direction") as ResizeDirection | null;
 
     if (!resizeHandle && (!dragHandle || actionButton)) {
       return;
@@ -538,7 +582,8 @@ export function HomeView(props: HomeViewProps) {
       offsetX: event.clientX - rect.left,
       offsetY: event.clientY - rect.top,
       startClientX: event.clientX,
-      startClientY: event.clientY
+      startClientY: event.clientY,
+      resizeDirection: resizeDirection ?? undefined
     };
 
     interactionRef.current = nextInteraction;
@@ -598,17 +643,29 @@ export function HomeView(props: HomeViewProps) {
           全ウィジェット削除
         </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            setWidgetPickerOpen(true);
-          }}
-          className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700"
-        >
-          <FaPlus />
-          ウィジェット追加
-        </button>
+        {editMode ? (
+          <button
+            type="button"
+            onClick={() => {
+              setWidgetPickerOpen(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700"
+          >
+            <FaPlus />
+            ウィジェット追加
+          </button>
+        ) : null}
       </div>
+
+      {toasts.length > 0 ? (
+        <div className="toast-stack" aria-live="polite">
+          {toasts.map((toast) => (
+            <p key={toast.id} className={`notice ${toast.tone} toast-notice`}>
+              {toast.message}
+            </p>
+          ))}
+        </div>
+      ) : null}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
@@ -642,6 +699,12 @@ export function HomeView(props: HomeViewProps) {
                   >
                     {dashboard ? (
                       <>
+                        {page.isDraft ? (
+                          <div className="pointer-events-none absolute left-5 top-5 z-10 rounded-full border border-violet-200 bg-white/90 px-3 py-1 text-xs font-semibold text-violet-700 shadow-sm">
+                            ドラフトページ
+                          </div>
+                        ) : null}
+
                         <div className="relative h-full min-h-0">
                           {pageWidgets.map((widget) => {
                             const layout = findDisplayLayout(pageLayouts, breakpoint, widget.id);
@@ -656,7 +719,7 @@ export function HomeView(props: HomeViewProps) {
                             return (
                               <div
                                 key={widget.id}
-                                className="absolute overflow-hidden transition-[left,top,width,height] duration-200"
+                                className="absolute overflow-visible transition-[left,top,width,height] duration-200"
                                 style={layoutToStyle(displayLayout, gridMetrics)}
                                 onMouseDownCapture={(event) => startWidgetInteraction(event, widget.id, page.id, layout)}
                               >
@@ -694,11 +757,23 @@ export function HomeView(props: HomeViewProps) {
                                     />
 
                                     {editMode ? (
-                                      <button
-                                        type="button"
-                                        className="widget-resize-handle absolute bottom-2 right-2 z-10 h-4 w-4 cursor-se-resize rounded-sm border border-slate-300/80 bg-white/80 shadow-sm transition hover:border-violet-300 hover:bg-violet-50"
-                                        aria-label="ウィジェットをリサイズ"
-                                      />
+                                      <>
+                                        <div className="widget-resize-handle absolute inset-x-3 -top-1 z-10 h-2 cursor-n-resize" data-resize-direction="n" />
+                                        <div className="widget-resize-handle absolute inset-x-3 -bottom-1 z-10 h-2 cursor-s-resize" data-resize-direction="s" />
+                                        <div className="widget-resize-handle absolute inset-y-3 -left-1 z-10 w-2 cursor-w-resize" data-resize-direction="w" />
+                                        <div className="widget-resize-handle absolute inset-y-3 -right-1 z-10 w-2 cursor-e-resize" data-resize-direction="e" />
+                                        <div className="widget-resize-handle absolute -left-1 -top-1 z-10 h-3.5 w-3.5 cursor-nw-resize" data-resize-direction="nw" />
+                                        <div className="widget-resize-handle absolute -right-1 -top-1 z-10 h-3.5 w-3.5 cursor-ne-resize" data-resize-direction="ne" />
+                                        <div className="widget-resize-handle absolute -left-1 -bottom-1 z-10 h-3.5 w-3.5 cursor-sw-resize" data-resize-direction="sw" />
+                                        <div className="widget-resize-handle absolute -right-1 -bottom-1 z-10 h-3.5 w-3.5 cursor-se-resize" data-resize-direction="se" />
+                                        <div className="pointer-events-none absolute bottom-2 right-2 z-10 flex h-7 w-7 items-end justify-end rounded-full bg-white/92 p-1 shadow-[0_12px_28px_-18px_rgba(15,23,42,0.75)] ring-1 ring-slate-200/80">
+                                          <div className="relative h-3.5 w-3.5 text-violet-500">
+                                            <span className="absolute bottom-0 right-0 block h-0.5 w-3.5 rotate-[-45deg] rounded-full bg-current" />
+                                            <span className="absolute bottom-[0.3rem] right-[0.18rem] block h-0.5 w-2.5 rotate-[-45deg] rounded-full bg-current opacity-80" />
+                                            <span className="absolute bottom-[0.6rem] right-[0.36rem] block h-0.5 w-1.5 rotate-[-45deg] rounded-full bg-current opacity-60" />
+                                          </div>
+                                        </div>
+                                      </>
                                     ) : null}
                                   </>
                                 )}
