@@ -72,7 +72,7 @@ export function createLayoutState(input: CreateLayoutStateInput): LayoutState {
   const state: LayoutState = {
     grid: input.grid,
     mode: input.mode ?? 'edit',
-    collisionMode: input.collisionMode ?? 'reject',
+    collisionMode: input.collisionMode ?? 'make-room-adjacent',
     widgets: input.widgets ?? [],
     pageCount: calculatePageCount(input.widgets ?? []),
     draftPage: input.draftPage ?? null

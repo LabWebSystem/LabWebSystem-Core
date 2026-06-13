@@ -10,6 +10,8 @@ import {
 } from "../dashboard/constants";
 import {
   addWidgetToDashboardDocument,
+  applyWidgetRectOnDashboardDocument,
+  findWidgetLayoutForBreakpoint,
   moveWidgetToPageInDashboardDocument
 } from "../dashboard/moduleAdapter";
 import {
@@ -135,7 +137,7 @@ export function useDashboardWorkspace() {
   }, []);
 
   useEffect(() => {
-    if (!dashboard || !loadedRef.current) {
+    if (!dashboard || !loadedRef.current || isLayoutInteracting) {
       return;
     }
 
@@ -155,7 +157,7 @@ export function useDashboardWorkspace() {
         window.clearTimeout(saveTimerRef.current);
       }
     };
-  }, [dashboard]);
+  }, [dashboard, isLayoutInteracting]);
 
   function changePage(nextPageIndex: number) {
     if (!dashboard) {
@@ -194,6 +196,17 @@ export function useDashboardWorkspace() {
 
       return sanitizeDashboardDocument(merged, maxRows, strictBreakpoint);
     });
+  }
+
+  function applyWidgetRect(
+    widgetId: string,
+    rect: Pick<GridLayouts[DashboardBreakpoint][number], "x" | "y" | "w" | "h">,
+    maxRows: number,
+    strictBreakpoint?: DashboardBreakpoint
+  ) {
+    setDashboard((previous) =>
+      previous ? applyWidgetRectOnDashboardDocument(previous, widgetId, rect, maxRows, strictBreakpoint) : previous
+    );
   }
 
   function repairDashboard(maxRows: number, strictBreakpoint?: DashboardBreakpoint) {
@@ -348,12 +361,15 @@ export function useDashboardWorkspace() {
     currentLayouts,
     changePage,
     updateLayouts,
+    applyWidgetRect,
     repairDashboard,
     addWidget,
     deleteWidget,
     clearAllWidgets,
     beginWidgetDrag,
     shiftDraggingWidgetPage,
-    endWidgetDrag
+    endWidgetDrag,
+    findWidgetLayout: (widgetId: string, targetBreakpoint: DashboardBreakpoint) =>
+      dashboard ? findWidgetLayoutForBreakpoint(dashboard, widgetId, targetBreakpoint) : null
   };
 }

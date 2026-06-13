@@ -1,10 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 
-import { Responsive, WidthProvider } from "react-grid-layout/legacy";
-
-import "react-grid-layout/css/styles.css";
-import "react-resizable/css/styles.css";
-
 import { FaPlus } from "react-icons/fa6";
 
 import { WidgetPickerModal } from "../components/WidgetPickerModal";
@@ -12,6 +7,7 @@ import {
   BREAKPOINTS,
   COLS,
   CONTAINER_PADDING,
+  EMPTY_GRID_LAYOUTS,
   GRID_MARGIN,
   ROW_HEIGHT
 } from "../dashboard/constants";
@@ -23,11 +19,15 @@ import { useDashboardLogWidget } from "../hooks/useDashboardLogWidget";
 import { useDashboardMetrics } from "../hooks/useDashboardMetrics";
 import { useDashboardWorkspace } from "../hooks/useDashboardWorkspace";
 
-import type { ApplicationJob, ApplicationListItem, SystemEvent, SystemStatus } from "../types";
+import type {
+  ApplicationJob,
+  ApplicationListItem,
+  DashboardBreakpoint,
+  SystemEvent,
+  SystemStatus
+} from "../types";
 
 import { DashboardWidgetRenderer } from "../widgets/dashboard/DashboardWidgetRenderer";
-
-const ResponsiveGridLayout = WidthProvider(Responsive as any) as any;
 
 const PAGE_SWITCH_OUTSIDE_THRESHOLD_PX = 22;
 const PAGE_EDGE_INITIAL_DELAY_MS = 240;
@@ -54,72 +54,135 @@ type DragPreviewState = {
   offsetY: number;
 };
 
-function overlapsHorizontally(
-  a: Pick<GridItemLayout, "x" | "w">,
-  b: Pick<GridItemLayout, "x" | "w">
-): boolean {
-  return a.x < b.x + b.w && a.x + a.w > b.x;
+type FrameSize = {
+  width: number;
+  height: number;
+};
+
+type GridMetrics = {
+  cellWidth: number;
+  cellHeight: number;
+  unitWidth: number;
+  unitHeight: number;
+};
+
+type InteractionState = {
+  kind: "drag" | "resize";
+  widgetId: string;
+  pageId: string;
+  startLayout: GridItemLayout;
+  draftLayout: GridItemLayout;
+  offsetX: number;
+  offsetY: number;
+  startClientX: number;
+  startClientY: number;
+};
+
+function resolveBreakpoint(width: number): DashboardBreakpoint {
+  if (width >= BREAKPOINTS.lg) {
+    return "lg";
+  }
+
+  if (width >= BREAKPOINTS.md) {
+    return "md";
+  }
+
+  if (width >= BREAKPOINTS.sm) {
+    return "sm";
+  }
+
+  return "xs";
 }
 
-function getMaxHeightBeforeCollision(
-  item: GridItemLayout,
-  layout: GridItemLayout[],
-  maxRows: number
-): number {
-  const nearestBottomBlockerY = layout
-    .filter((other) => other.i !== item.i)
-    .filter((other) => overlapsHorizontally(item, other))
-    .filter((other) => other.y >= item.y + item.h)
-    .reduce((nearestY, other) => Math.min(nearestY, other.y), maxRows);
-
-  const minHeight = item.minH ?? 1;
-  const maxHeightByGrid = Math.max(minHeight, maxRows - item.y);
-  const maxHeightByCollision = Math.max(minHeight, nearestBottomBlockerY - item.y);
-  const originalMaxHeight = item.maxH ?? maxHeightByGrid;
-
-  return Math.max(
-    minHeight,
-    Math.min(originalMaxHeight, maxHeightByGrid, maxHeightByCollision)
-  );
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
-function applyResizeGuardsToLayout(
-  layout: GridItemLayout[],
-  maxRows: number
-): GridItemLayout[] {
-  return layout.map((item) => {
-    const maxH = getMaxHeightBeforeCollision(item, layout, maxRows);
+function buildGridMetrics(frameSize: FrameSize, breakpoint: DashboardBreakpoint): GridMetrics {
+  const cols = COLS[breakpoint];
+  const availableWidth = Math.max(0, frameSize.width - CONTAINER_PADDING[0] * 2 - GRID_MARGIN[0] * (cols - 1));
+  const cellWidth = availableWidth / cols;
 
-    return {
-      ...item,
-      maxH,
-      h: Math.min(item.h, maxH)
-    };
-  });
-}
-
-function applyResizeGuardsToLayouts(
-  layouts: GridLayouts,
-  maxRows: number
-): GridLayouts {
   return {
-    lg: applyResizeGuardsToLayout(layouts.lg, maxRows),
-    md: applyResizeGuardsToLayout(layouts.md, maxRows),
-    sm: applyResizeGuardsToLayout(layouts.sm, maxRows),
-    xs: applyResizeGuardsToLayout(layouts.xs, maxRows)
+    cellWidth,
+    cellHeight: ROW_HEIGHT,
+    unitWidth: cellWidth + GRID_MARGIN[0],
+    unitHeight: ROW_HEIGHT + GRID_MARGIN[1]
   };
 }
 
-function layoutFitsMaxRows(layout: GridItemLayout[], limit: number): boolean {
-  return layout.every((item) => item.y + item.h <= limit);
+function layoutToStyle(layout: GridItemLayout, metrics: GridMetrics): React.CSSProperties {
+  return {
+    left: CONTAINER_PADDING[0] + layout.x * metrics.unitWidth,
+    top: CONTAINER_PADDING[1] + layout.y * metrics.unitHeight,
+    width: layout.w * metrics.cellWidth + Math.max(0, layout.w - 1) * GRID_MARGIN[0],
+    height: layout.h * metrics.cellHeight + Math.max(0, layout.h - 1) * GRID_MARGIN[1]
+  };
 }
 
-function layoutsFitMaxRows(layouts: GridLayouts, limit: number): boolean {
-  return (
-    layoutFitsMaxRows(layouts.lg, limit) &&
-    layoutFitsMaxRows(layouts.md, limit) &&
-    layoutFitsMaxRows(layouts.sm, limit) &&
-    layoutFitsMaxRows(layouts.xs, limit)
+function clampLayoutToGrid(layout: GridItemLayout, breakpoint: DashboardBreakpoint, maxRows: number): GridItemLayout {
+  const maxW = layout.maxW ?? COLS[breakpoint];
+  const maxH = layout.maxH ?? maxRows;
+  const minW = layout.minW ?? 1;
+  const minH = layout.minH ?? 1;
+  const w = clamp(layout.w, minW, Math.min(maxW, COLS[breakpoint]));
+  const h = clamp(layout.h, minH, Math.min(maxH, maxRows));
+  const x = clamp(layout.x, 0, Math.max(0, COLS[breakpoint] - w));
+  const y = clamp(layout.y, 0, Math.max(0, maxRows - h));
+
+  return {
+    ...layout,
+    x,
+    y,
+    w,
+    h
+  };
+}
+
+function resolveDragLayout(
+  pointer: MouseEvent,
+  interaction: InteractionState,
+  boundary: DOMRect,
+  metrics: GridMetrics,
+  breakpoint: DashboardBreakpoint,
+  maxRows: number
+): GridItemLayout {
+  const rawX = Math.round(
+    (pointer.clientX - boundary.left - CONTAINER_PADDING[0] - interaction.offsetX) / metrics.unitWidth
+  );
+  const rawY = Math.round(
+    (pointer.clientY - boundary.top - CONTAINER_PADDING[1] - interaction.offsetY) / metrics.unitHeight
+  );
+
+  return clampLayoutToGrid(
+    {
+      ...interaction.startLayout,
+      x: rawX,
+      y: rawY
+    },
+    breakpoint,
+    maxRows
+  );
+}
+
+function resolveResizeLayout(
+  pointer: MouseEvent,
+  interaction: InteractionState,
+  breakpoint: DashboardBreakpoint,
+  maxRows: number,
+  metrics: GridMetrics
+): GridItemLayout {
+  const deltaCols = Math.round((pointer.clientX - interaction.startClientX) / metrics.unitWidth);
+  const deltaRows = Math.round((pointer.clientY - interaction.startClientY) / metrics.unitHeight);
+
+  return clampLayoutToGrid(
+    {
+      ...interaction.startLayout,
+      w: interaction.startLayout.w + deltaCols,
+      h: interaction.startLayout.h + deltaRows
+    },
+    breakpoint,
+    maxRows
   );
 }
 
@@ -131,9 +194,15 @@ export function HomeView(props: HomeViewProps) {
   const dragEdgeDirectionRef = useRef<-1 | 1 | null>(null);
   const dragEdgeTimerRef = useRef<number | null>(null);
   const dragEdgeIntervalRef = useRef<number | null>(null);
+  const interactionRef = useRef<InteractionState | null>(null);
+  const frameSizeRef = useRef<FrameSize>({ width: 0, height: 0 });
+  const breakpointRef = useRef<DashboardBreakpoint>("lg");
+  const maxRowsRef = useRef(1);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [maxRows, setMaxRows] = useState(1);
+  const [frameSize, setFrameSize] = useState<FrameSize>({ width: 0, height: 0 });
   const [dragPreview, setDragPreview] = useState<DragPreviewState | null>(null);
+  const [interaction, setInteraction] = useState<InteractionState | null>(null);
 
   const { metrics, metricsHistory } = useDashboardMetrics();
   const { logWidget, logSourceOptions, setApplicationId, setSelectedService } = useDashboardLogWidget(applications);
@@ -154,15 +223,34 @@ export function HomeView(props: HomeViewProps) {
     currentPageIndex,
     currentLayouts,
     changePage,
-    updateLayouts,
+    applyWidgetRect,
     repairDashboard,
     addWidget,
     deleteWidget,
     clearAllWidgets,
     beginWidgetDrag,
     shiftDraggingWidgetPage,
-    endWidgetDrag
+    endWidgetDrag,
+    findWidgetLayout
   } = useDashboardWorkspace();
+
+  const gridMetrics = buildGridMetrics(frameSize, breakpoint);
+
+  useEffect(() => {
+    interactionRef.current = interaction;
+  }, [interaction]);
+
+  useEffect(() => {
+    frameSizeRef.current = frameSize;
+  }, [frameSize]);
+
+  useEffect(() => {
+    breakpointRef.current = breakpoint;
+  }, [breakpoint]);
+
+  useEffect(() => {
+    maxRowsRef.current = maxRows;
+  }, [maxRows]);
 
   useEffect(() => {
     if (!dashboard || maxRows < 1 || isLayoutInteracting) {
@@ -178,10 +266,12 @@ export function HomeView(props: HomeViewProps) {
     }
 
     clearDragEdgeNavigation();
+    interactionRef.current = null;
+    setInteraction(null);
     setIsLayoutInteracting(false);
     setDragPreview(null);
     endWidgetDrag(maxRows, breakpoint);
-  }, [editMode, maxRows, breakpoint]);
+  }, [editMode, maxRows, breakpoint, endWidgetDrag, setIsLayoutInteracting]);
 
   function toggleEditMode() {
     if (!editMode) {
@@ -214,20 +304,15 @@ export function HomeView(props: HomeViewProps) {
     dragEdgeDirectionRef.current = direction;
 
     dragEdgeTimerRef.current = window.setTimeout(() => {
-      shiftDraggingWidgetPage(direction, maxRows, breakpoint);
+      shiftDraggingWidgetPage(direction, maxRowsRef.current, breakpointRef.current);
 
       dragEdgeIntervalRef.current = window.setInterval(() => {
-        shiftDraggingWidgetPage(direction, maxRows, breakpoint);
+        shiftDraggingWidgetPage(direction, maxRowsRef.current, breakpointRef.current);
       }, PAGE_EDGE_REPEAT_MS);
     }, PAGE_EDGE_INITIAL_DELAY_MS);
   }
 
-  function handleGridDrag(event: unknown) {
-    if (!editMode || !(event instanceof MouseEvent)) {
-      clearDragEdgeNavigation();
-      return;
-    }
-
+  function handleGridDrag(event: MouseEvent) {
     const boundary = rootRef.current?.getBoundingClientRect();
 
     if (!boundary) {
@@ -298,6 +383,94 @@ export function HomeView(props: HomeViewProps) {
     }
   }
 
+  function finishInteraction() {
+    const active = interactionRef.current;
+
+    clearDragEdgeNavigation();
+
+    if (active) {
+      applyWidgetRect(active.widgetId, active.draftLayout, maxRowsRef.current, breakpointRef.current);
+    }
+
+    interactionRef.current = null;
+    setInteraction(null);
+    setIsLayoutInteracting(false);
+    setDragPreview(null);
+    endWidgetDrag(maxRowsRef.current, breakpointRef.current);
+  }
+
+  useEffect(() => {
+    if (!interaction) {
+      return;
+    }
+
+    function handleMouseMove(event: MouseEvent) {
+      const active = interactionRef.current;
+      const boundary = currentGridFrameRef.current?.getBoundingClientRect();
+
+      if (!active || !boundary) {
+        return;
+      }
+
+      const activeMetrics = buildGridMetrics(frameSizeRef.current, breakpointRef.current);
+
+      if (active.kind === "drag") {
+        handleGridDrag(event);
+        setDragPreview((previous) =>
+          previous
+            ? {
+                ...previous,
+                left: event.clientX - previous.offsetX,
+                top: event.clientY - previous.offsetY
+              }
+            : previous
+        );
+
+        const nextLayout = resolveDragLayout(
+          event,
+          active,
+          boundary,
+          activeMetrics,
+          breakpointRef.current,
+          maxRowsRef.current
+        );
+        const nextInteraction = {
+          ...active,
+          draftLayout: nextLayout
+        };
+        interactionRef.current = nextInteraction;
+        setInteraction(nextInteraction);
+        return;
+      }
+
+      const nextLayout = resolveResizeLayout(
+        event,
+        active,
+        breakpointRef.current,
+        maxRowsRef.current,
+        activeMetrics
+      );
+      const nextInteraction = {
+        ...active,
+        draftLayout: nextLayout
+      };
+      interactionRef.current = nextInteraction;
+      setInteraction(nextInteraction);
+    }
+
+    function handleMouseUp() {
+      finishInteraction();
+    }
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [interaction, applyWidgetRect, endWidgetDrag, setIsLayoutInteracting]);
+
   useEffect(() => {
     const element = currentGridFrameRef.current;
 
@@ -305,17 +478,20 @@ export function HomeView(props: HomeViewProps) {
       return;
     }
 
-    const updateMaxRows = () => {
+    const updateMeasurements = () => {
+      const width = element.clientWidth;
       const height = element.clientHeight;
       const nextRows = Math.max(1, Math.floor((height - GRID_VERTICAL_CHROME) / (ROW_HEIGHT + GRID_MARGIN[1])));
 
+      setFrameSize({ width, height });
       setMaxRows(nextRows);
+      setBreakpoint(resolveBreakpoint(width));
     };
 
-    updateMaxRows();
+    updateMeasurements();
 
     const observer = new ResizeObserver(() => {
-      updateMaxRows();
+      updateMeasurements();
     });
 
     observer.observe(element);
@@ -323,18 +499,77 @@ export function HomeView(props: HomeViewProps) {
     return () => {
       observer.disconnect();
     };
-  }, [currentPage?.id]);
+  }, [currentPage?.id, setBreakpoint]);
+
+  function startWidgetInteraction(
+    event: React.MouseEvent<HTMLDivElement>,
+    widgetId: string,
+    pageId: string,
+    layout: GridItemLayout
+  ) {
+    if (!editMode) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (!target) {
+      return;
+    }
+
+    const resizeHandle = target.closest(".widget-resize-handle");
+    const dragHandle = target.closest(".widget-drag-handle");
+    const actionButton = target.closest("button");
+
+    if (!resizeHandle && (!dragHandle || actionButton)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const element = event.currentTarget;
+    const rect = element.getBoundingClientRect();
+    const nextInteraction: InteractionState = {
+      kind: resizeHandle ? "resize" : "drag",
+      widgetId,
+      pageId,
+      startLayout: layout,
+      draftLayout: layout,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      startClientX: event.clientX,
+      startClientY: event.clientY
+    };
+
+    interactionRef.current = nextInteraction;
+    setInteraction(nextInteraction);
+    setIsLayoutInteracting(true);
+
+    if (!resizeHandle) {
+      beginWidgetDrag(widgetId);
+      setDragPreview({
+        widgetId,
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top
+      });
+    }
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.12),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.10),transparent_20%),linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)]">
       <div className="flex items-center justify-end gap-2 border-b border-slate-200/80 bg-white/80 px-5 py-3 backdrop-blur">
         <span
-          className={`rounded-full px-3 py-1 text-xs font-semibold ${saveState === "error"
+          className={`rounded-full px-3 py-1 text-xs font-semibold ${
+            saveState === "error"
               ? "bg-rose-100 text-rose-700"
               : saveState === "saving"
                 ? "bg-amber-100 text-amber-700"
                 : "bg-emerald-100 text-emerald-700"
-            }`}
+          }`}
         >
           {saveState === "saving" ? "レイアウト保存中" : saveState === "error" ? "保存失敗" : "保存済み"}
         </span>
@@ -342,8 +577,9 @@ export function HomeView(props: HomeViewProps) {
         <button
           type="button"
           onClick={toggleEditMode}
-          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${editMode ? "bg-slate-900 text-white hover:bg-slate-800" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-            }`}
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            editMode ? "bg-slate-900 text-white hover:bg-slate-800" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
         >
           {editMode ? "編集完了" : "レイアウト編集"}
         </button>
@@ -357,7 +593,7 @@ export function HomeView(props: HomeViewProps) {
               ? "border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
               : "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400 opacity-70"
           }`}
-          title={editMode ? "全ウィジェットを削除" : "編集モード中のみ利用できます"}
+          title={editMode ? "全ウィジェット削除" : "編集モード中のみ利用できます"}
         >
           全ウィジェット削除
         </button>
@@ -393,164 +629,83 @@ export function HomeView(props: HomeViewProps) {
                 ? page.id === currentPage?.id
                   ? currentLayouts
                   : toRglLayouts(dashboard, page.id)
-                : { lg: [], md: [], sm: [], xs: [] };
-
-              const guardedPageLayouts = applyResizeGuardsToLayouts(pageLayouts, maxRows);
-
-              const interactivePageLayouts: GridLayouts = editMode
-                ? guardedPageLayouts
-                : {
-                  lg: guardedPageLayouts.lg.map((item) => ({
-                    ...item,
-                    static: true,
-                    isDraggable: false,
-                    isResizable: false
-                  })),
-                  md: guardedPageLayouts.md.map((item) => ({
-                    ...item,
-                    static: true,
-                    isDraggable: false,
-                    isResizable: false
-                  })),
-                  sm: guardedPageLayouts.sm.map((item) => ({
-                    ...item,
-                    static: true,
-                    isDraggable: false,
-                    isResizable: false
-                  })),
-                  xs: guardedPageLayouts.xs.map((item) => ({
-                    ...item,
-                    static: true,
-                    isDraggable: false,
-                    isResizable: false
-                  }))
-                };
-
+                : EMPTY_GRID_LAYOUTS;
               const pageWidgets = dashboard?.widgets.filter((widget) => widget.pageId === page.id) ?? [];
 
               return (
                 <section key={page.id} className="h-full min-h-0 shrink-0 p-4">
                   <div
                     ref={page.id === currentPage?.id ? currentGridFrameRef : null}
-                    className={`relative h-full min-h-0 rounded-[1.8rem] border border-white/80 shadow-[0_26px_80px_-60px_rgba(15,23,42,0.6)] backdrop-blur transition ${page.isDraft ? "bg-white/35 opacity-70" : "bg-white/65"
-                      }`}
+                    className={`relative h-full min-h-0 rounded-[1.8rem] border border-white/80 shadow-[0_26px_80px_-60px_rgba(15,23,42,0.6)] backdrop-blur transition ${
+                      page.isDraft ? "bg-white/35 opacity-70" : "bg-white/65"
+                    }`}
                   >
                     {dashboard ? (
                       <>
-                        <ResponsiveGridLayout
-                          key={`${page.id}-${editMode ? "edit" : "view"}`}
-                          className="layout h-full"
-                          style={{ height: "100%" }}
-                          breakpoints={BREAKPOINTS}
-                          cols={COLS}
-                          rowHeight={ROW_HEIGHT}
-                          margin={GRID_MARGIN}
-                          containerPadding={CONTAINER_PADDING}
-                          maxRows={maxRows}
-                          autoSize={false}
-                          layouts={interactivePageLayouts}
-                          isDraggable={editMode}
-                          isResizable={editMode}
-                          draggableHandle={editMode ? ".widget-drag-handle" : undefined}
-                          preventCollision={true}
-                          allowOverlap={false}
-                          compactType={null}
-                          resizeHandles={editMode ? ["se"] : []}
-                          isBounded={true}
-                          onBreakpointChange={(nextBreakpoint: string) => setBreakpoint(nextBreakpoint as typeof breakpoint)}
-                          onLayoutChange={(_: unknown, nextLayouts: unknown) => {
-                            if (!editMode || page.id !== currentPage?.id) {
-                              return;
+                        <div className="relative h-full min-h-0">
+                          {pageWidgets.map((widget) => {
+                            const layout = findDisplayLayout(pageLayouts, breakpoint, widget.id);
+                            if (!layout) {
+                              return null;
                             }
 
-                            const candidateLayouts = nextLayouts as GridLayouts;
+                            const widgetInteraction =
+                              interaction?.widgetId === widget.id && page.id === currentPage?.id ? interaction : null;
+                            const displayLayout = widgetInteraction?.draftLayout ?? layout;
 
-                            updateLayouts(candidateLayouts, maxRows, breakpoint);
-                          }}
-                          onDragStart={(_: unknown, __: unknown, item: { i?: string }, ___: unknown, event: unknown, element: HTMLElement) => {
-                            setIsLayoutInteracting(true);
+                            return (
+                              <div
+                                key={widget.id}
+                                className="absolute overflow-hidden transition-[left,top,width,height] duration-200"
+                                style={layoutToStyle(displayLayout, gridMetrics)}
+                                onMouseDownCapture={(event) => startWidgetInteraction(event, widget.id, page.id, layout)}
+                              >
+                                {widgetInteraction ? (
+                                  <div className="flex h-full min-h-0 items-center justify-center rounded-[1.4rem] border-2 border-dashed border-violet-300 bg-violet-100/45">
+                                    <span className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-500">
+                                      配置先
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <DashboardWidgetRenderer
+                                      widget={widget}
+                                      layout={layout}
+                                      pageIndex={pageIndex}
+                                      totalPages={dashboard.pages.length}
+                                      breakpoint={breakpoint}
+                                      editMode={editMode}
+                                      onDelete={(widgetId) => deleteWidget(widgetId, maxRows, breakpoint)}
+                                      system={system}
+                                      applications={applications}
+                                      jobs={jobs}
+                                      events={events}
+                                      metrics={metrics}
+                                      metricsHistory={metricsHistory}
+                                      dashboardPageCount={dashboard.pages.length}
+                                      dashboardWidgetCount={dashboard.widgets.length}
+                                      logWidget={logWidget}
+                                      logSourceOptions={logSourceOptions}
+                                      onLogApplicationChange={setApplicationId}
+                                      onLogServiceChange={setSelectedService}
+                                      onOpenApplications={onOpenApplications}
+                                      onOpenEvents={onOpenEvents}
+                                      onOpenDetail={onOpenDetail}
+                                    />
 
-                            if (item?.i) {
-                              beginWidgetDrag(item.i);
-                            }
-
-                            if (event instanceof MouseEvent && element instanceof HTMLElement && item?.i) {
-                              const rect = element.getBoundingClientRect();
-                              setDragPreview({
-                                widgetId: item.i,
-                                left: rect.left,
-                                top: rect.top,
-                                width: rect.width,
-                                height: rect.height,
-                                offsetX: event.clientX - rect.left,
-                                offsetY: event.clientY - rect.top
-                              });
-                            }
-                          }}
-                          onDrag={(_: unknown, __: unknown, ___: unknown, ____: unknown, event: unknown) => {
-                            handleGridDrag(event);
-
-                            if (event instanceof MouseEvent) {
-                              setDragPreview((previous) =>
-                                previous
-                                  ? {
-                                      ...previous,
-                                      left: event.clientX - previous.offsetX,
-                                      top: event.clientY - previous.offsetY
-                                    }
-                                  : previous
-                              );
-                            }
-                          }}
-                          onDragStop={() => {
-                            clearDragEdgeNavigation();
-                            setIsLayoutInteracting(false);
-                            setDragPreview(null);
-                            endWidgetDrag(maxRows, breakpoint);
-                          }}
-                          onResizeStart={() => setIsLayoutInteracting(true)}
-                          onResizeStop={() => {
-                            setIsLayoutInteracting(false);
-                            repairDashboard(maxRows, breakpoint);
-                          }}
-                        >
-                          {pageWidgets.map((widget) => (
-                            <div key={widget.id} className="overflow-hidden">
-                              {dragPreview?.widgetId === widget.id ? (
-                                <div className="flex h-full min-h-0 items-center justify-center rounded-[1.4rem] border-2 border-dashed border-violet-300 bg-violet-100/45">
-                                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-500">
-                                    配置先
-                                  </span>
-                                </div>
-                              ) : (
-                                <DashboardWidgetRenderer
-                                  widget={widget}
-                                  layout={findDisplayLayout(guardedPageLayouts, breakpoint, widget.id)}
-                                  pageIndex={pageIndex}
-                                  totalPages={dashboard.pages.length}
-                                  breakpoint={breakpoint}
-                                  editMode={editMode}
-                                  onDelete={(widgetId) => deleteWidget(widgetId, maxRows, breakpoint)}
-                                  system={system}
-                                  applications={applications}
-                                  jobs={jobs}
-                                  events={events}
-                                  metrics={metrics}
-                                  metricsHistory={metricsHistory}
-                                  dashboardPageCount={dashboard.pages.length}
-                                  dashboardWidgetCount={dashboard.widgets.length}
-                                  logWidget={logWidget}
-                                  logSourceOptions={logSourceOptions}
-                                  onLogApplicationChange={setApplicationId}
-                                  onLogServiceChange={setSelectedService}
-                                  onOpenApplications={onOpenApplications}
-                                  onOpenEvents={onOpenEvents}
-                                  onOpenDetail={onOpenDetail}
-                                />
-                              )}
-                            </div>
-                          ))}
-                        </ResponsiveGridLayout>
+                                    {editMode ? (
+                                      <button
+                                        type="button"
+                                        className="widget-resize-handle absolute bottom-2 right-2 z-10 h-4 w-4 cursor-se-resize rounded-sm border border-slate-300/80 bg-white/80 shadow-sm transition hover:border-violet-300 hover:bg-violet-50"
+                                        aria-label="ウィジェットをリサイズ"
+                                      />
+                                    ) : null}
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
 
                         {pageWidgets.length === 0 ? (
                           <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
@@ -579,8 +734,7 @@ export function HomeView(props: HomeViewProps) {
         {dragPreview && dashboard ? (
           (() => {
             const previewWidget = dashboard.widgets.find((widget) => widget.id === dragPreview.widgetId);
-            const previewPageId = previewWidget?.pageId ?? currentPage?.id ?? "";
-            const previewLayouts = dashboard ? toRglLayouts(dashboard, previewPageId) : { lg: [], md: [], sm: [], xs: [] };
+            const previewLayout = findWidgetLayout(dragPreview.widgetId, breakpoint);
 
             return previewWidget ? (
               <div
@@ -594,7 +748,7 @@ export function HomeView(props: HomeViewProps) {
               >
                 <DashboardWidgetRenderer
                   widget={previewWidget}
-                  layout={findDisplayLayout(previewLayouts, breakpoint, previewWidget.id)}
+                  layout={previewLayout}
                   pageIndex={currentPageIndex}
                   totalPages={dashboard.pages.length}
                   breakpoint={breakpoint}
@@ -630,14 +784,15 @@ export function HomeView(props: HomeViewProps) {
               className={`group flex items-center gap-3 ${pageIndex === currentPageIndex ? "text-slate-900" : "text-slate-400"}`}
             >
               <span
-                className={`h-2.5 w-2.5 rounded-full ${pageIndex === currentPageIndex
+                className={`h-2.5 w-2.5 rounded-full ${
+                  pageIndex === currentPageIndex
                     ? page.isDraft
                       ? "bg-violet-300"
                       : "bg-violet-600"
                     : page.isDraft
                       ? "bg-slate-200"
                       : "bg-slate-300 group-hover:bg-slate-400"
-                  }`}
+                }`}
               />
 
               <span className="text-xs font-semibold">{page.isDraft ? "+" : pageIndex + 1}</span>

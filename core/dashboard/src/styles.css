@@ -1438,37 +1438,6 @@ select:focus {
   font-size: 0.82rem;
 }
 
-.react-grid-layout {
-  min-height: 100%;
-}
-
-.react-grid-item {
-  transition: transform 180ms ease, box-shadow 180ms ease;
-}
-
-.react-grid-item.react-draggable-dragging {
-  z-index: 30;
-  box-shadow: 0 28px 72px -42px rgba(15, 23, 42, 0.62);
-}
-
-.react-grid-item.resizing {
-  z-index: 20;
-}
-
-.react-grid-placeholder {
-  border: 2px dashed rgba(139, 92, 246, 0.55);
-  background: rgba(139, 92, 246, 0.12);
-  border-radius: 22px;
-}
-
-.react-resizable-handle {
-  opacity: 0.85;
-}
-
-.react-resizable-handle::after {
-  border-color: rgba(100, 116, 139, 0.8);
-}
-
 .badge {
   display: inline-flex;
   align-items: center;

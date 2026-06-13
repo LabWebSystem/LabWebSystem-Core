@@ -8,6 +8,7 @@ import type {
   DashboardWidgetType
 } from "../types";
 import { BREAKPOINT_KEYS, COLS } from "./constants";
+import { GridDashboardEngine } from "./gridModule/engine";
 import { findFreeSpace, isRectFree } from "./gridModule/collision";
 import type { Rect, WidgetLayout as ModuleWidgetLayout, WidgetTemplate } from "./gridModule/types";
 import { widgetLabel, widgetSizing } from "./widgetDefinitions";
@@ -158,6 +159,23 @@ function toDashboardLayoutItem(layout: ModuleWidgetLayout, pageId: string): Dash
   return {
     i: layout.id,
     pageId,
+    x: layout.x,
+    y: layout.y,
+    w: layout.w,
+    h: layout.h,
+    minW: layout.minW,
+    minH: layout.minH,
+    maxW: layout.maxW,
+    maxH: layout.maxH,
+    static: layout.locked,
+    isDraggable: layout.draggable,
+    isResizable: layout.resizable
+  };
+}
+
+function toGridItemLayout(layout: ModuleWidgetLayout): Omit<DashboardLayoutItem, "pageId"> {
+  return {
+    i: layout.id,
     x: layout.x,
     y: layout.y,
     w: layout.w,
@@ -563,4 +581,102 @@ export function moveWidgetToPageInDashboardDocument(
     layouts: mergeWidgetLayouts(document.layouts, widget, targetPageId, placement, maxRows),
     currentPageId: targetPageId
   };
+}
+
+export function applyWidgetRectOnDashboardDocument(
+  document: DashboardLayoutDocument,
+  widgetId: string,
+  rect: Pick<DashboardLayoutItem, "x" | "y" | "w" | "h">,
+  maxRows: number,
+  strictBreakpoint?: DashboardBreakpoint
+): DashboardLayoutDocument {
+  const widget = document.widgets.find((candidate) => candidate.id === widgetId);
+  const primaryBreakpoint = strictBreakpoint ?? "lg";
+
+  if (!widget) {
+    return document;
+  }
+
+  const pageWidgets = document.widgets.filter((candidate) => candidate.pageId === widget.pageId);
+  const pageIndex = document.pages.findIndex((page) => page.id === widget.pageId);
+  if (pageIndex < 0) {
+    return document;
+  }
+
+  const layouts = pageWidgets.flatMap((candidate) => {
+    const item = widgetLayoutItem(document.layouts, primaryBreakpoint, candidate.id);
+    if (!item) {
+      return [];
+    }
+
+    return [
+      toModuleWidgetLayout(
+        buildWidgetTemplate(candidate, primaryBreakpoint, 0, { ...item, pageId: widget.pageId }, maxRows)
+      )
+    ];
+  });
+
+  const engine = GridDashboardEngine.create({
+    grid: { cols: COLS[primaryBreakpoint], rows: Math.max(1, maxRows) },
+    widgets: layouts,
+    mode: "edit",
+    collisionMode: "make-room-adjacent"
+  });
+
+  const result = engine.moveWidget(widgetId, {
+    page: 0,
+    x: rect.x,
+    y: rect.y,
+    w: rect.w,
+    h: rect.h
+  });
+
+  if (result.status !== "accepted") {
+    return document;
+  }
+
+  const nextLayoutsForBreakpoint = [
+    ...document.layouts[primaryBreakpoint].filter((item) => item.pageId !== widget.pageId),
+    ...result.state.widgets.map((layout) => toDashboardLayoutItem({ ...layout, page: pageIndex }, widget.pageId))
+  ];
+
+  const nextDocument: DashboardLayoutDocument = {
+    ...document,
+    layouts: {
+      ...document.layouts,
+      [primaryBreakpoint]: nextLayoutsForBreakpoint
+    }
+  };
+
+  return sanitizeDashboardDocument(nextDocument, maxRows, primaryBreakpoint);
+}
+
+export function findWidgetLayoutForBreakpoint(
+  document: DashboardLayoutDocument,
+  widgetId: string,
+  breakpoint: DashboardBreakpoint
+): Omit<DashboardLayoutItem, "pageId"> | null {
+  const item = widgetLayoutItem(document.layouts, breakpoint, widgetId);
+  if (!item) {
+    return null;
+  }
+
+  return toGridItemLayout(
+    toModuleWidgetLayout({
+      id: item.i,
+      type: document.widgets.find((widget) => widget.id === widgetId)?.type ?? "unknown",
+      page: 0,
+      x: item.x,
+      y: item.y,
+      w: item.w,
+      h: item.h,
+      minW: item.minW ?? 1,
+      minH: item.minH ?? 1,
+      maxW: item.maxW ?? item.w,
+      maxH: item.maxH ?? item.h,
+      locked: item.static,
+      draggable: item.isDraggable,
+      resizable: item.isResizable
+    })
+  );
 }
