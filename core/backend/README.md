@@ -68,6 +68,9 @@
 - 破壊的クリーンアップ: `yarn destroy`
   - `.env` は保持
   - DB/生成物/runtime/Docker 管理資産を削除
+- 権限修復: `yarn permissions:repair`
+  - 以前 root で作られた `core/backend/data/database.sqlite` や `runtime/` 配下を現在ユーザーへ戻す
+  - `SqliteError: attempt to write a readonly database` が出たときの復旧に使う
 
 ## .env 読込
 - backend 起動時に `core/backend/.env` を自動読込

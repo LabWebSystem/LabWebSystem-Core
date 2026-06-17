@@ -79,6 +79,10 @@ function ensureGeneratedFiles(options: RunOptions = {}): void {
   runTsScript("scripts/dev/ensure-generated-files.ts", [], options);
 }
 
+function ensureManagedPermissions(options: RunOptions = {}): void {
+  runTsScript("scripts/dev/ensure-managed-permissions.ts", [], options);
+}
+
 function coreDeps(options: RunOptions = {}): void {
   runCompose("core", ["run", "--rm", "deps"], {
     env: { ...coreComposeEnv, ...(options.env ?? {}) }
@@ -86,6 +90,7 @@ function coreDeps(options: RunOptions = {}): void {
 }
 
 function coreUp(options: RunOptions = {}): void {
+  ensureManagedPermissions(options);
   ensureGeneratedFiles(options);
   coreDeps(options);
   runCompose("core", ["up", "-d", "--force-recreate", "backend", "dashboard"], {
@@ -265,7 +270,11 @@ const commands: Record<string, CommandHandler> = {
   "config:set": () => runConfigCommand(),
   "config:show": () => runConfigShowCommand(),
   "config:edit": () => runConfigEditCommand(),
-  "service:backend:up": () => run("corepack", ["yarn", "workspace", "@lab-core/backend", "dev"]),
+  "permissions:repair": () => runTsScript("scripts/dev/repair-managed-permissions.ts"),
+  "service:backend:up": () => {
+    ensureManagedPermissions();
+    run("corepack", ["yarn", "workspace", "@lab-core/backend", "dev"]);
+  },
   "service:dashboard:up": () => run("corepack", ["yarn", "workspace", "@lab-core/dashboard", "dev"]),
   "quality:build": () => {
     run("corepack", ["yarn", "workspace", "@lab-core/backend", "build"]);
