@@ -16,6 +16,23 @@ interface RunOptions {
 const thisFile = fileURLToPath(import.meta.url);
 const projectRoot = path.resolve(path.dirname(thisFile), "..", "..");
 const backendEnvPath = path.join(projectRoot, "core", "backend", ".env");
+const dockerSocketPath = "/var/run/docker.sock";
+
+function currentUid(): string {
+  return typeof process.getuid === "function" ? String(process.getuid()) : "1000";
+}
+
+function currentGid(): string {
+  return typeof process.getgid === "function" ? String(process.getgid()) : "1000";
+}
+
+function dockerSocketGroupId(): string {
+  try {
+    return String(fs.statSync(dockerSocketPath).gid);
+  } catch {
+    return currentGid();
+  }
+}
 
 const composeFiles: Record<ComposeKey, string> = {
   core: "infra/compose/docker-compose.dev.yml",
@@ -24,7 +41,10 @@ const composeFiles: Record<ComposeKey, string> = {
 };
 
 const coreComposeEnv: NodeJS.ProcessEnv = {
-  LAB_CORE_HOST_PROJECT_ROOT: projectRoot
+  LAB_CORE_HOST_PROJECT_ROOT: projectRoot,
+  LAB_CORE_HOST_UID: currentUid(),
+  LAB_CORE_HOST_GID: currentGid(),
+  LAB_CORE_DOCKER_SOCKET_GID: dockerSocketGroupId()
 };
 
 const labEnv: NodeJS.ProcessEnv = {

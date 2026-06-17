@@ -8,7 +8,7 @@
 - current
 
 最終更新日:
-- 2026-06-07
+- 2026-06-17
 
 補足:
 - 正式仕様は `docs/archives/20260516_230913_公式仕様統合/official_specification.md` を参照してください。
@@ -35,6 +35,10 @@
 - `backend` / `dashboard` / `proxy` / `dns` には `restart: unless-stopped` を設定しています。
 - サーバー再起動後も、手動停止していない限り Docker により自動起動されます。
 - `deps` はワンショット用途のため自動再起動対象にしていません。
+
+権限補足:
+- 標準の起動コマンドでは、`backend` / `dashboard` コンテナを実行ユーザーの UID/GID に合わせて起動します。
+- これにより、`core/dashboard/dist` や `core/dashboard/tsconfig.tsbuildinfo` などの生成物が `root` 所有になりにくくなります。
 
 ## 3. 画面の見方
 ### 3.1 ホーム
