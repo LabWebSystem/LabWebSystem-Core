@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { FaChartPie, FaClockRotateLeft, FaCube, FaListCheck, FaRotate, FaServer } from "react-icons/fa6";
+import { VscVscode } from "react-icons/vsc";
 import type { SystemStatus } from "../types";
 
 export type DashboardView = "home" | "apps" | "events" | "import" | "detail";
@@ -8,6 +9,7 @@ type DashboardShellProps = {
   activeView: DashboardView;
   executionMode: "dry-run" | "execute" | null;
   system: SystemStatus | null;
+  sshServiceIp: string | null;
   selectedApplicationName: string | null;
   loading: boolean;
   refreshing: boolean;
@@ -20,6 +22,9 @@ type DashboardShellProps = {
   children: ReactNode;
   jobsPanel: ReactNode;
 };
+
+const vscodeRemoteUser = "amoeba";
+const vscodeWorkspacePath = "/home/arpanet/work/LabWebSystem-Core";
 
 function currentViewTitle(activeView: DashboardView): string {
   if (activeView === "apps") {
@@ -74,6 +79,7 @@ export function DashboardShell(props: DashboardShellProps) {
     activeView,
     executionMode,
     system,
+    sshServiceIp,
     selectedApplicationName,
     loading,
     refreshing,
@@ -89,6 +95,12 @@ export function DashboardShell(props: DashboardShellProps) {
 
   const navActive = activeView === "events" ? "events" : activeView === "home" ? "home" : "apps";
   const status = statusMeta(system, loading, refreshing, failedJobsCount);
+  const vscodeRemoteTarget = sshServiceIp?.trim().length
+    ? `ssh-remote+${vscodeRemoteUser}@${sshServiceIp.trim()}`
+    : null;
+  const vscodeUrl = vscodeRemoteTarget
+    ? `vscode://vscode-remote/${vscodeRemoteTarget}${vscodeWorkspacePath}`
+    : null;
 
   return (
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-800">
@@ -177,6 +189,27 @@ export function DashboardShell(props: DashboardShellProps) {
                 <span className="mx-0.5">{activeJobsCount}</span>件の処理中
               </button>
             ) : null}
+
+            {vscodeUrl ? (
+              <a
+                href={vscodeUrl}
+                className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 hover:text-slate-900 active:scale-95"
+                title={`${vscodeRemoteUser}@${sshServiceIp?.trim()} に VS Code Remote-SSH で接続`}
+              >
+                <VscVscode className="text-base text-sky-600" />
+                <span>VS Codeで開く</span>
+              </a>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-300"
+                title="SSH 接続先 IP が取得できないため VS Code を起動できません"
+              >
+                <VscVscode className="text-base" />
+                <span>VS Codeで開く</span>
+              </button>
+            )}
 
             <button
               type="button"

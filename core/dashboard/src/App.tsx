@@ -964,6 +964,7 @@ export function App() {
       selectedApplicationName={selectedApplication?.name ?? null}
       executionMode={system?.execution?.mode ?? null}
       system={system}
+      sshServiceIp={system?.execution?.sshServiceIp ?? null}
       loading={busy}
       refreshing={refreshing}
       activeJobsCount={activeJobsCount}
