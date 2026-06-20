@@ -16,21 +16,6 @@ export type DeploymentMode = "standard" | "headless";
 
 export type EventLevel = "info" | "warning" | "error";
 
-export type JobType =
-  | "clone"
-  | "build"
-  | "deploy"
-  | "stop"
-  | "resume"
-  | "rebuild"
-  | "delete"
-  | "update-check"
-  | "update"
-  | "rollback"
-  | "restart";
-
-export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-
 export type OperationType =
   | "deploy"
   | "restart"
