@@ -1,10 +1,14 @@
-import { nanoid } from "nanoid";
 import type Database from "better-sqlite3";
+import { nanoid } from "nanoid";
+import { buildComposeProjectName } from "../../services/compose-project.js";
 
 function parseJsonList(value: string): string[] {
   try {
     const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
   } catch {
     return [];
   }
@@ -13,12 +17,16 @@ function parseJsonList(value: string): string[] {
 function parseJsonRecord(value: string): Record<string, string> {
   try {
     const parsed = JSON.parse(value) as unknown;
+
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       return {};
     }
+
     return Object.fromEntries(
-      Object.entries(parsed)
-        .filter((entry): entry is [string, string] => typeof entry[0] === "string" && typeof entry[1] === "string")
+      Object.entries(parsed).filter(
+        (entry): entry is [string, string] =>
+          typeof entry[0] === "string" && typeof entry[1] === "string"
+      )
     );
   } catch {
     return {};
@@ -26,7 +34,7 @@ function parseJsonRecord(value: string): Record<string, string> {
 }
 
 export class ApplicationRepository {
-  constructor(private readonly db: Database.Database) {}
+  constructor(private readonly db: Database.Database) { }
 
   createApplication(
     input: {
@@ -48,9 +56,12 @@ export class ApplicationRepository {
     const applicationId = nanoid();
     const deploymentId = nanoid();
     const routeId = nanoid();
+    const composeProjectName = buildComposeProjectName(applicationId, input.name);
+
     const tx = this.db.transaction(() => {
-      this.db.prepare(
-        `
+      this.db
+        .prepare(
+          `
           INSERT INTO applications (
             application_id,
             name,
@@ -63,24 +74,27 @@ export class ApplicationRepository {
             deleted_at,
             created_at,
             updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      ).run(
-        applicationId,
-        input.name,
-        input.description,
-        input.repositoryUrl,
-        input.defaultBranch,
-        null,
-        null,
-        "Registered",
-        null,
-        timestamp,
-        timestamp
-      );
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `
+        )
+        .run(
+          applicationId,
+          input.name,
+          input.description,
+          input.repositoryUrl,
+          input.defaultBranch,
+          null,
+          null,
+          "Registered",
+          null,
+          timestamp,
+          timestamp
+        );
 
-      this.db.prepare(
-        `
+      this.db
+        .prepare(
+          `
           INSERT INTO deployments (
             deployment_id,
             application_id,
@@ -95,26 +109,29 @@ export class ApplicationRepository {
             env_overrides,
             enabled,
             released_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `
-      ).run(
-        deploymentId,
-        applicationId,
-        input.composePath,
-        `${input.name}-${applicationId.slice(0, 6)}`,
-        input.publicServiceName,
-        input.publicPort,
-        input.hostname,
-        input.mode,
-        input.keepVolumesOnRebuild ? 1 : 0,
-        JSON.stringify(input.deviceRequirements),
-        JSON.stringify(input.envOverrides),
-        1,
-        null
-      );
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `
+        )
+        .run(
+          deploymentId,
+          applicationId,
+          input.composePath,
+          composeProjectName,
+          input.publicServiceName,
+          input.publicPort,
+          input.hostname,
+          input.mode,
+          input.keepVolumesOnRebuild ? 1 : 0,
+          JSON.stringify(input.deviceRequirements),
+          JSON.stringify(input.envOverrides),
+          1,
+          null
+        );
 
-      this.db.prepare(
-        `
+      this.db
+        .prepare(
+          `
           INSERT INTO routes (
             route_id,
             application_id,
@@ -123,9 +140,19 @@ export class ApplicationRepository {
             upstream_port,
             enabled,
             released_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        `
-      ).run(routeId, applicationId, input.hostname, input.publicServiceName, input.publicPort, 1, null);
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          `
+        )
+        .run(
+          routeId,
+          applicationId,
+          input.hostname,
+          input.publicServiceName,
+          input.publicPort,
+          1,
+          null
+        );
     });
 
     tx();
@@ -138,8 +165,9 @@ export class ApplicationRepository {
   }
 
   listApplications(): Array<Record<string, unknown>> {
-    const rows = this.db.prepare(
-      `
+    const rows = this.db
+      .prepare(
+        `
         SELECT
           a.application_id,
           a.name,
@@ -167,8 +195,9 @@ export class ApplicationRepository {
         LEFT JOIN update_info u ON u.application_id = a.application_id
         WHERE a.deleted_at IS NULL
         ORDER BY a.created_at DESC
-      `
-    ).all() as Array<Record<string, unknown>>;
+        `
+      )
+      .all() as Array<Record<string, unknown>>;
 
     return rows.map((row) => ({
       ...row,
@@ -181,8 +210,9 @@ export class ApplicationRepository {
   }
 
   getApplication(applicationId: string): Record<string, unknown> | null {
-    const row = this.db.prepare(
-      `
+    const row = this.db
+      .prepare(
+        `
         SELECT
           application_id,
           name,
@@ -198,15 +228,17 @@ export class ApplicationRepository {
         FROM applications
         WHERE application_id = ?
           AND deleted_at IS NULL
-      `
-    ).get(applicationId) as Record<string, unknown> | undefined;
+        `
+      )
+      .get(applicationId) as Record<string, unknown> | undefined;
 
     return row ?? null;
   }
 
   getDeployment(applicationId: string): Record<string, unknown> | null {
-    const row = this.db.prepare(
-      `
+    const row = this.db
+      .prepare(
+        `
         SELECT
           deployment_id,
           application_id,
@@ -223,8 +255,9 @@ export class ApplicationRepository {
           released_at
         FROM deployments
         WHERE application_id = ?
-      `
-    ).get(applicationId) as Record<string, unknown> | undefined;
+        `
+      )
+      .get(applicationId) as Record<string, unknown> | undefined;
 
     if (!row) {
       return null;
@@ -249,45 +282,83 @@ export class ApplicationRepository {
     operations: unknown[];
   } | null {
     const application = this.getApplication(applicationId);
+
     if (!application) {
       return null;
     }
 
     const deployment = this.getDeployment(applicationId);
-    const routes = this.db.prepare(
-      `
-        SELECT route_id, hostname, upstream_container, upstream_port, enabled, released_at
+
+    const routes = this.db
+      .prepare(
+        `
+        SELECT
+          route_id,
+          hostname,
+          upstream_container,
+          upstream_port,
+          enabled,
+          released_at
         FROM routes
         WHERE application_id = ?
         ORDER BY hostname ASC
-      `
-    ).all(applicationId) as Array<Record<string, unknown>>;
-    const containers = this.db.prepare(
-      `
-        SELECT container_id, service_name, runtime_name, health_state, restart_count, last_seen_at
+        `
+      )
+      .all(applicationId) as Array<Record<string, unknown>>;
+
+    const containers = this.db
+      .prepare(
+        `
+        SELECT
+          container_id,
+          service_name,
+          runtime_name,
+          health_state,
+          restart_count,
+          last_seen_at
         FROM container_instances
         WHERE application_id = ?
         ORDER BY service_name ASC
-      `
-    ).all(applicationId);
-    const updateInfo = this.db.prepare(
-      `
-        SELECT current_commit, latest_remote_commit, has_update, checked_at
+        `
+      )
+      .all(applicationId);
+
+    const updateInfo = this.db
+      .prepare(
+        `
+        SELECT
+          current_commit,
+          latest_remote_commit,
+          has_update,
+          checked_at
         FROM update_info
         WHERE application_id = ?
-      `
-    ).get(applicationId) as Record<string, unknown> | undefined;
-    const events = this.db.prepare(
-      `
-        SELECT event_id, scope, application_id, level, title, message, created_at
+        `
+      )
+      .get(applicationId) as Record<string, unknown> | undefined;
+
+    const events = this.db
+      .prepare(
+        `
+        SELECT
+          event_id,
+          scope,
+          application_id,
+          level,
+          title,
+          message,
+          created_at
         FROM system_events
         WHERE application_id = ?
         ORDER BY created_at DESC
         LIMIT 50
-      `
-    ).all(applicationId);
-    const operations = this.db.prepare(
-      `
+        `
+      )
+      .all(applicationId);
+
+    const operations = this.db
+      .prepare(
+        `
         SELECT
           operation_id,
           application_id,
@@ -311,8 +382,9 @@ export class ApplicationRepository {
         WHERE application_id = ?
         ORDER BY created_at DESC
         LIMIT 40
-      `
-    ).all(applicationId);
+        `
+      )
+      .all(applicationId);
 
     return {
       application,
@@ -322,41 +394,54 @@ export class ApplicationRepository {
         enabled: Boolean(route.enabled)
       })),
       containers,
-      updateInfo: updateInfo ? { ...updateInfo, has_update: Boolean(updateInfo.has_update) } : null,
+      updateInfo: updateInfo
+        ? {
+          ...updateInfo,
+          has_update: Boolean(updateInfo.has_update)
+        }
+        : null,
       events,
       operations
     };
   }
 
-  updateApplication(applicationId: string, input: Partial<{
-    name: string;
-    description: string;
-    repositoryUrl: string;
-    defaultBranch: string;
-  }>, timestamp: string): void {
+  updateApplication(
+    applicationId: string,
+    input: Partial<{
+      name: string;
+      description: string;
+      repositoryUrl: string;
+      defaultBranch: string;
+    }>,
+    timestamp: string
+  ): void {
     const current = this.getApplication(applicationId);
+
     if (!current) {
       throw new Error("Application not found.");
     }
 
-    this.db.prepare(
-      `
+    this.db
+      .prepare(
+        `
         UPDATE applications
-        SET name = ?,
-            description = ?,
-            repository_url = ?,
-            default_branch = ?,
-            updated_at = ?
+        SET
+          name = ?,
+          description = ?,
+          repository_url = ?,
+          default_branch = ?,
+          updated_at = ?
         WHERE application_id = ?
-      `
-    ).run(
-      input.name ?? String(current.name),
-      input.description ?? String(current.description ?? ""),
-      input.repositoryUrl ?? String(current.repository_url),
-      input.defaultBranch ?? String(current.default_branch),
-      timestamp,
-      applicationId
-    );
+        `
+      )
+      .run(
+        input.name ?? String(current.name),
+        input.description ?? String(current.description ?? ""),
+        input.repositoryUrl ?? String(current.repository_url),
+        input.defaultBranch ?? String(current.default_branch),
+        timestamp,
+        applicationId
+      );
   }
 
   updateDeployment(
@@ -371,39 +456,46 @@ export class ApplicationRepository {
     }
   ): void {
     const deployment = this.getDeployment(applicationId);
+
     if (!deployment) {
       throw new Error("Deployment not found.");
     }
 
-    this.db.prepare(
-      `
+    this.db
+      .prepare(
+        `
         UPDATE deployments
-        SET compose_path = ?,
-            public_service_name = ?,
-            public_port = ?,
-            hostname = ?,
-            keep_volumes_on_rebuild = ?,
-            env_overrides = ?
+        SET
+          compose_path = ?,
+          public_service_name = ?,
+          public_port = ?,
+          hostname = ?,
+          keep_volumes_on_rebuild = ?,
+          env_overrides = ?
         WHERE application_id = ?
-      `
-    ).run(
-      input.composePath,
-      input.publicServiceName,
-      input.publicPort,
-      input.hostname,
-      input.keepVolumesOnRebuild ? 1 : 0,
-      JSON.stringify(input.envOverrides),
-      applicationId
-    );
+        `
+      )
+      .run(
+        input.composePath,
+        input.publicServiceName,
+        input.publicPort,
+        input.hostname,
+        input.keepVolumesOnRebuild ? 1 : 0,
+        JSON.stringify(input.envOverrides),
+        applicationId
+      );
 
-    this.db.prepare(
-      `
+    this.db
+      .prepare(
+        `
         UPDATE routes
-        SET hostname = ?,
-            upstream_container = ?,
-            upstream_port = ?
+        SET
+          hostname = ?,
+          upstream_container = ?,
+          upstream_port = ?
         WHERE application_id = ?
-      `
-    ).run(input.hostname, input.publicServiceName, input.publicPort, applicationId);
+        `
+      )
+      .run(input.hostname, input.publicServiceName, input.publicPort, applicationId);
   }
 }

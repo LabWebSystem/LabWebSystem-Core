@@ -36,7 +36,21 @@ const operationService = new OperationService({
   eventBus: operationEventBus,
   autoStart: true,
   scheduleOperation: (operationId) => {
-    void operationRunner.executeOperation(operationId);
+    void operationRunner.executeOperation(operationId).catch((error) => {
+      const message =
+        error instanceof Error ? error.message : "Operation execution failed.";
+
+      recordSystemEvent(db, {
+        scope: "operation",
+        level: "error",
+        title: "Operation 実行中に未捕捉エラーが発生しました",
+        message,
+        createdAt: nowIso()
+      });
+
+      // eslint-disable-next-line no-console
+      console.error(`[operation-runner] ${operationId}: ${message}`);
+    });
   }
 });
 
@@ -112,7 +126,8 @@ if (currentEventCount === 0) {
   });
 }
 
-const interruptedOperations = await operationService.markIncompleteOperationsAsInterrupted();
+const interruptedOperations =
+  await operationService.markIncompleteOperationsAsInterrupted();
 
 if (interruptedOperations.length > 0) {
   recordSystemEvent(db, {
@@ -149,6 +164,7 @@ try {
   syncInfrastructure("backend-startup");
 } catch (error) {
   const message = error instanceof Error ? error.message : "不明なエラー";
+
   recordEvent({
     scope: "infrastructure",
     level: "warning",

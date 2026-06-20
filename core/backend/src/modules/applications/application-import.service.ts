@@ -4,11 +4,10 @@ import path from "node:path";
 import { simpleGit } from "simple-git";
 import { z } from "zod";
 import {
-	buildFallbackServiceCandidate as buildFallbackComposeServiceCandidate,
 	collectRepositoryMetadataFromPaths as collectComposeRepositoryMetadataFromPaths,
 	inspectComposeYaml,
+	listLocalRepositoryFiles as listComposeLocalRepositoryFiles,
 	type ComposeInspectionResult,
-	type ComposeServiceCandidate,
 	type RepositoryMetadata
 } from "../../services/compose-inspection.js";
 import {
@@ -59,6 +58,20 @@ type GithubBlobResponse = {
 type ResolvedImportManifest = {
 	manifestPath: string;
 	manifest: LabcoreManifest;
+};
+
+type ImportResolveResult = {
+	canonicalRepositoryUrl: string;
+	resolvedBranch: string;
+	branchFixed: boolean;
+	branchCandidates: string[];
+	repositoryFiles: string[];
+	yamlFiles: string[];
+	composeCandidates: string[];
+	recommendedComposePath: string | null;
+	manifestPath: string;
+	manifest: LabcoreManifest;
+	warning?: string;
 };
 
 function decodeSegment(segment: string): string {
@@ -309,12 +322,42 @@ async function fetchBlobContent(blobUrl: string): Promise<string> {
 	return Buffer.from(blob.content.replace(/\n/g, ""), "base64").toString("utf8");
 }
 
+function listLocalRepositoryFiles(repoPath: string): string[] {
+	return listComposeLocalRepositoryFiles(repoPath);
+}
+
 function collectRepositoryMetadataFromPaths(repositoryFiles: string[]): RepositoryMetadata {
 	return collectComposeRepositoryMetadataFromPaths(repositoryFiles);
 }
 
 function collectRepositoryMetadata(entries: GithubTreeEntry[]): RepositoryMetadata {
 	return collectRepositoryMetadataFromPaths(entries.map((entry) => entry.path));
+}
+
+async function fetchRepositoryFilesFromRemote(
+	repositoryUrl: string,
+	branch: string
+): Promise<string[]> {
+	try {
+		const entries = await fetchRepositoryTree(repositoryUrl, branch);
+		return entries.map((entry) => entry.path).sort((a, b) => a.localeCompare(b));
+	} catch {
+		return withTemporaryGitClone(repositoryUrl, branch, async (repoPath) =>
+			listLocalRepositoryFiles(repoPath).sort((a, b) => a.localeCompare(b))
+		);
+	}
+}
+
+async function collectRepositoryMetadataFromRemote(
+	repositoryUrl: string,
+	branch: string
+): Promise<{ repositoryFiles: string[]; metadata: RepositoryMetadata }> {
+	const repositoryFiles = await fetchRepositoryFilesFromRemote(repositoryUrl, branch);
+
+	return {
+		repositoryFiles,
+		metadata: collectRepositoryMetadataFromPaths(repositoryFiles)
+	};
 }
 
 async function resolveImportManifestFromRemote(
@@ -338,12 +381,7 @@ async function resolveImportManifestFromRemote(
 		};
 	} catch {
 		return withTemporaryGitClone(repositoryUrl, branch, async (repoPath) => {
-			const repositoryFiles = fs
-				.readdirSync(repoPath, { recursive: true, withFileTypes: true })
-				.filter((entry) => entry.isFile())
-				.map((entry) => path.relative(repoPath, path.join(entry.parentPath, entry.name)))
-				.map((entryPath) => entryPath.split(path.sep).join("/"));
-
+			const repositoryFiles = listLocalRepositoryFiles(repoPath);
 			const manifestPath = findLabcoreManifestPath(repositoryFiles);
 			const absoluteManifestPath = path.resolve(repoPath, manifestPath);
 			const rawManifest = fs.readFileSync(absoluteManifestPath, "utf8");
@@ -356,13 +394,6 @@ async function resolveImportManifestFromRemote(
 	}
 }
 
-function buildFallbackServiceCandidate(
-	serviceName: string,
-	publicPort: number
-): ComposeServiceCandidate {
-	return buildFallbackComposeServiceCandidate(serviceName, publicPort);
-}
-
 function resolveSelectedComposePath(composePath: string, metadata: RepositoryMetadata): string {
 	const normalizedComposePath = composePath.trim().replace(/^\/+/, "");
 
@@ -371,43 +402,56 @@ function resolveSelectedComposePath(composePath: string, metadata: RepositoryMet
 		: metadata.recommendedComposePath ?? metadata.composeCandidates[0] ?? "";
 }
 
-export async function resolveImportSource(sourceUrl: string): Promise<{
-	canonicalRepositoryUrl: string;
-	resolvedBranch: string;
-	branchCandidates: string[];
-	branchMatched: boolean;
-	manifestPath: string;
-	manifest: LabcoreManifest;
-}> {
+function buildResolveWarning(
+	parsedSource: ParsedGithubImportSource,
+	selectedBranch: { branch: string; matched: boolean },
+	branchCandidates: string[]
+): string | undefined {
+	if (parsedSource.sourceType !== "tree" || selectedBranch.matched) {
+		return undefined;
+	}
+
+	if (branchCandidates.length === 0) {
+		return "branch候補を取得できなかったため、URLから解釈したbranchを使用しています。";
+	}
+
+	return "URLのbranch部分を既存branch候補と完全一致できなかったため、URLから解釈したbranchを使用しています。";
+}
+
+export async function resolveImportSource(sourceUrl: string): Promise<ImportResolveResult> {
 	const parsedSource = parseGithubImportSource(sourceUrl);
 
 	let branchCandidates: string[] = [];
-	let resolvedBranch =
-		parsedSource.sourceType === "repository" ? "main" : parsedSource.treeTail ?? "main";
-	let branchMatched = false;
+	let selectedBranch: { branch: string; matched: boolean } = {
+		branch: parsedSource.sourceType === "repository" ? "main" : parsedSource.treeTail ?? "main",
+		matched: false
+	};
 
 	try {
 		branchCandidates = await fetchRemoteBranches(parsedSource.canonicalRepositoryUrl);
-		const selectedBranch = selectBestBranch(parsedSource.treeTail, branchCandidates);
-		resolvedBranch = selectedBranch.branch;
-		branchMatched = selectedBranch.matched;
+		selectedBranch = selectBestBranch(parsedSource.treeTail, branchCandidates);
 	} catch {
 		branchCandidates = [];
-		branchMatched = false;
 	}
 
-	const manifestResult = await resolveImportManifestFromRemote(
-		parsedSource.canonicalRepositoryUrl,
-		resolvedBranch
-	);
+	const resolvedBranch = selectedBranch.branch;
+	const [{ repositoryFiles, metadata }, manifestResult] = await Promise.all([
+		collectRepositoryMetadataFromRemote(parsedSource.canonicalRepositoryUrl, resolvedBranch),
+		resolveImportManifestFromRemote(parsedSource.canonicalRepositoryUrl, resolvedBranch)
+	]);
 
 	return {
 		canonicalRepositoryUrl: parsedSource.canonicalRepositoryUrl,
 		resolvedBranch,
+		branchFixed: parsedSource.sourceType === "repository",
 		branchCandidates,
-		branchMatched,
+		repositoryFiles,
+		yamlFiles: metadata.yamlFiles,
+		composeCandidates: metadata.composeCandidates,
+		recommendedComposePath: metadata.recommendedComposePath,
 		manifestPath: manifestResult.manifestPath,
-		manifest: manifestResult.manifest
+		manifest: manifestResult.manifest,
+		warning: buildResolveWarning(parsedSource, selectedBranch, branchCandidates)
 	};
 }
 
@@ -416,29 +460,63 @@ export async function inspectImportCompose(
 	branch: string,
 	composePath: string
 ): Promise<ComposeInspectionResult> {
-	const entries = await fetchRepositoryTree(repositoryUrl, branch);
-	const metadata = collectRepositoryMetadata(entries);
-	const normalizedPath = resolveSelectedComposePath(composePath, metadata);
-	const matchedEntry = entries.find((entry) => entry.path === normalizedPath);
+	try {
+		const entries = await fetchRepositoryTree(repositoryUrl, branch);
+		const metadata = collectRepositoryMetadata(entries);
+		const normalizedPath = resolveSelectedComposePath(composePath, metadata);
+		const matchedEntry = entries.find((entry) => entry.path === normalizedPath);
 
-	if (!matchedEntry) {
-		throw new Error(`compose ファイルが見つかりません: ${normalizedPath}`);
-	}
-
-	const content = await fetchBlobContent(matchedEntry.url);
-
-	return inspectComposeYaml({
-		rawYaml: content,
-		composeCandidates: metadata.composeCandidates,
-		yamlFiles: metadata.yamlFiles,
-		recommendedComposePath: metadata.recommendedComposePath,
-		selectedComposePath: normalizedPath,
-		source: {
-			kind: "github",
-			path: normalizedPath,
-			repositoryUrl,
-			branch,
-			blobUrl: matchedEntry.url
+		if (!matchedEntry) {
+			throw new Error(`compose ファイルが見つかりません: ${normalizedPath}`);
 		}
-	});
+
+		const content = await fetchBlobContent(matchedEntry.url);
+
+		return inspectComposeYaml({
+			rawYaml: content,
+			composeCandidates: metadata.composeCandidates,
+			yamlFiles: metadata.yamlFiles,
+			recommendedComposePath: metadata.recommendedComposePath,
+			selectedComposePath: normalizedPath,
+			source: {
+				kind: "github",
+				path: normalizedPath,
+				repositoryUrl,
+				branch,
+				blobUrl: matchedEntry.url
+			}
+		});
+	} catch {
+		return withTemporaryGitClone(repositoryUrl, branch, async (repoPath) => {
+			const repositoryFiles = listLocalRepositoryFiles(repoPath);
+			const metadata = collectRepositoryMetadataFromPaths(repositoryFiles);
+			const normalizedPath = resolveSelectedComposePath(composePath, metadata);
+
+			if (normalizedPath.length === 0) {
+				throw new Error("compose 候補を検出できませんでした。");
+			}
+
+			const absolutePath = path.resolve(repoPath, normalizedPath);
+
+			if (!fs.existsSync(absolutePath)) {
+				throw new Error(`compose ファイルが見つかりません: ${normalizedPath}`);
+			}
+
+			const rawYaml = fs.readFileSync(absolutePath, "utf8");
+
+			return inspectComposeYaml({
+				rawYaml,
+				composeCandidates: metadata.composeCandidates,
+				yamlFiles: metadata.yamlFiles,
+				recommendedComposePath: metadata.recommendedComposePath,
+				selectedComposePath: normalizedPath,
+				source: {
+					kind: "github",
+					path: normalizedPath,
+					repositoryUrl,
+					branch
+				}
+			});
+		});
+	}
 }

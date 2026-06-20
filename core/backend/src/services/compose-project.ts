@@ -10,25 +10,46 @@ function normalizeComposeSegment(value: string): string {
     .replace(/[-_]+$/, "");
 }
 
-export function buildLegacyComposeProjectName(applicationName: string): string {
-  const normalizedName = normalizeComposeSegment(applicationName);
-  if (normalizedName.length > 0) {
-    return normalizedName;
-  }
-
-  return "labcore-app";
+function trimComposeProjectName(value: string): string {
+  return value.slice(0, 63).replace(/[-_]+$/, "");
 }
 
-export function buildComposeProjectName(applicationId: string, applicationName: string): string {
+export function sanitizeComposeProjectName(
+  value: string,
+  fallback = "labcore-app"
+): string {
+  const normalized = trimComposeProjectName(normalizeComposeSegment(value));
+
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  const normalizedFallback = trimComposeProjectName(
+    normalizeComposeSegment(fallback)
+  );
+
+  return normalizedFallback.length > 0 ? normalizedFallback : "labcore-app";
+}
+
+export function buildLegacyComposeProjectName(applicationName: string): string {
+  return sanitizeComposeProjectName(applicationName);
+}
+
+export function buildComposeProjectName(
+  applicationId: string,
+  applicationName: string
+): string {
   const baseName = buildLegacyComposeProjectName(applicationName);
-  const normalizedId = normalizeComposeSegment(applicationId).slice(0, 8);
+  const normalizedId = sanitizeComposeProjectName(applicationId, "").slice(0, 8);
 
   if (normalizedId.length === 0) {
     return baseName;
   }
 
-  const candidate = `${baseName}-${normalizedId}`;
-  return candidate.slice(0, 63).replace(/[-_]+$/, "") || `labcore-${normalizedId}`;
+  return (
+    trimComposeProjectName(`${baseName}-${normalizedId}`) ||
+    sanitizeComposeProjectName(`labcore-${normalizedId}`)
+  );
 }
 
 export function resolveComposeProjectName(
@@ -36,10 +57,11 @@ export function resolveComposeProjectName(
   applicationName: string,
   storedProjectName?: string | null
 ): string {
-  const normalizedStored = storedProjectName?.trim();
-  if (normalizedStored) {
+  const normalizedStored = sanitizeComposeProjectName(storedProjectName ?? "", "");
+
+  if (normalizedStored.length > 0) {
     return normalizedStored;
   }
 
-  return buildLegacyComposeProjectName(applicationName) || buildComposeProjectName(applicationId, applicationName);
+  return buildComposeProjectName(applicationId, applicationName);
 }
