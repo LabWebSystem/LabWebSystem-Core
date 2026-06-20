@@ -15,7 +15,6 @@
     "config:set": "corepack yarn tsx scripts/dev/root-command.ts config:set",
     "config:show": "corepack yarn tsx scripts/dev/root-command.ts config:show",
     "config:edit": "corepack yarn tsx scripts/dev/root-command.ts config:edit",
-    "destroy": "corepack yarn tsx scripts/dev/root-command.ts destroy",
     "destroy:soft": "corepack yarn tsx scripts/dev/root-command.ts destroy:soft",
     "destroy:hard": "corepack yarn tsx scripts/dev/root-command.ts destroy:hard",
     "system:up": "corepack yarn tsx scripts/dev/root-command.ts system:up",
