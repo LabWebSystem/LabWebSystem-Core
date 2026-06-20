@@ -130,7 +130,23 @@ export async function assessApplicationHealth(input: AssessApplicationHealthInpu
     );
   }
 
-  if (["Build Pending", "Cloning", "Deploying", "Rebuilding", "Deleting"].includes(normalizedStatus)) {
+  if (normalizedStatus === "Deleted") {
+    return buildHealthResponse(
+      {
+        state: "stopped",
+        severity: "inactive",
+        summary: "削除済みです",
+        url,
+        http_status: null,
+        response_time_ms: null,
+        reachable: null,
+        detail: "このアプリは削除済みとして通常一覧から除外されます。"
+      },
+      containerSummary
+    );
+  }
+
+  if (["Registered", "Build Pending", "Cloning", "Deploying", "Rebuilding", "Deleting"].includes(normalizedStatus)) {
     return buildHealthResponse(
       {
         state: "pending",
@@ -140,7 +156,7 @@ export async function assessApplicationHealth(input: AssessApplicationHealthInpu
         http_status: null,
         response_time_ms: null,
         reachable: null,
-        detail: "ジョブの進行中はヘルス結果が安定しないため、処理状況を優先表示しています。"
+        detail: "Operation の進行中はヘルス結果が安定しないため、処理状況を優先表示しています。"
       },
       containerSummary
     );

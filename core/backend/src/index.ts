@@ -4,34 +4,55 @@ import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { db, nowIso } from "./lib/db.js";
 import { env } from "./lib/env.js";
+import { requestIdMiddleware } from "./lib/http.js";
+import { createApplicationsApiRouter } from "./modules/applications/application.routes.js";
+import { recordSystemEvent } from "./modules/events/event.repository.js";
+import { InMemoryOperationEventBus } from "./modules/operations/operation-events.js";
+import { OperationLogRepository } from "./modules/operations/operation-log.repository.js";
+import { createOperationsApiRouter } from "./modules/operations/operation.routes.js";
+import { OperationRunner } from "./modules/operations/operation-runner.js";
+import { OperationService } from "./modules/operations/operation.service.js";
 import { getOpenApiDocument, getOpenApiYaml } from "./openapi.js";
 import { applicationsRouter } from "./routes/applications.js";
 import { eventsRouter } from "./routes/events.js";
 import { infrastructureRouter } from "./routes/infrastructure.js";
-import { jobsRouter } from "./routes/jobs.js";
-import { logsRouter } from "./routes/logs.js";
 import { systemRouter } from "./routes/system.js";
 import { testingRouter } from "./routes/testing.js";
 import { dnsServer } from "./services/dns-server.js";
 import { recordEvent } from "./services/events.js";
 import { syncInfrastructure } from "./services/infrastructure-sync.js";
-import { markIncompleteJobsAsInterrupted } from "./services/jobs.js";
 
 const app = new Hono();
+const operationEventBus = new InMemoryOperationEventBus();
+const operationRunner = new OperationRunner({
+  db,
+  eventBus: operationEventBus,
+  syncInfrastructure
+});
+const operationService = new OperationService({
+  db,
+  eventBus: operationEventBus,
+  autoStart: true,
+  scheduleOperation: (operationId) => {
+    void operationRunner.executeOperation(operationId);
+  }
+});
+const operationLogRepository = new OperationLogRepository(db);
 
 app.use("*", logger());
 app.use("/api/*", cors());
+app.use("/api/*", requestIdMiddleware);
 
 app.get("/health", (c) => {
   return c.json({ ok: true, timestamp: nowIso() });
 });
 
-app.route("/api/system", systemRouter);
+app.route("/api/applications", createApplicationsApiRouter({ db, operationService }));
 app.route("/api/applications", applicationsRouter);
-app.route("/api/jobs", jobsRouter);
+app.route("/api/operations", createOperationsApiRouter({ operationService }));
+app.route("/api/system", systemRouter);
 app.route("/api/events", eventsRouter);
 app.route("/api/infrastructure", infrastructureRouter);
-app.route("/api/logs", logsRouter);
 app.route("/api/testing", testingRouter);
 
 app.get("/api", (c) => {
@@ -68,13 +89,26 @@ if (currentEventCount === 0) {
   });
 }
 
-const interruptedJobs = markIncompleteJobsAsInterrupted();
-if (interruptedJobs.length > 0) {
-  recordEvent({
+const interruptedOperations = await operationService.markIncompleteOperationsAsInterrupted();
+if (interruptedOperations.length > 0) {
+  recordSystemEvent(db, {
     scope: "system",
     level: "warning",
-    title: "未完了ジョブを整理しました",
-    message: `起動時に ${interruptedJobs.length} 件の未完了ジョブを中断扱いへ更新しました。`
+    title: "未完了 Operation を整理しました",
+    message: `起動時に ${interruptedOperations.length} 件の未完了 Operation を interrupted へ更新しました。`,
+    createdAt: nowIso()
+  });
+}
+
+const logRetentionCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+const deletedLogCount = operationLogRepository.deleteLogsForCompletedOperationsBefore(logRetentionCutoff);
+if (deletedLogCount > 0) {
+  recordSystemEvent(db, {
+    scope: "system",
+    level: "info",
+    title: "古い Operation Log を整理しました",
+    message: `${deletedLogCount} 件の completed operation の log を削除しました。`,
+    createdAt: nowIso()
   });
 }
 

@@ -57,7 +57,7 @@ export type ApplicationListItem = {
   latest_error_message?: string | null;
   latest_error_at?: string | null;
   latest_job_type?: string | null;
-  latest_job_status?: "queued" | "running" | "succeeded" | "failed" | "cancelled" | null;
+  latest_job_status?: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted" | null;
   latest_job_message?: string | null;
   latest_job_created_at?: string | null;
   latest_job_started_at?: string | null;
@@ -133,7 +133,7 @@ export type CreateApplicationResponse = {
   applicationId: string;
   deploymentId: string;
   routeId: string;
-  jobId: string;
+  jobId?: string;
   message: string;
 };
 
@@ -219,6 +219,7 @@ export type ApplicationLogsResponse = {
   applicationId: string;
   applicationName: string;
   service: string | null;
+  services?: string[];
   tail: number;
   lines: string[];
   fetchedAt: string;
@@ -287,7 +288,7 @@ export type ApplicationHealthCheck = {
 export type ApplicationJob = {
   job_id: string;
   type: string;
-  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted";
   started_at: string | null;
   finished_at: string | null;
   message: string | null;

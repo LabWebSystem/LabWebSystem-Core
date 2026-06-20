@@ -33,7 +33,11 @@ const routeQuery = db.prepare(`
   FROM routes r
   INNER JOIN deployments d ON d.application_id = r.application_id
   INNER JOIN applications a ON a.application_id = r.application_id
-  WHERE r.enabled = 1 AND d.enabled = 1
+  WHERE r.enabled = 1
+    AND d.enabled = 1
+    AND r.released_at IS NULL
+    AND d.released_at IS NULL
+    AND a.deleted_at IS NULL
   ORDER BY r.hostname ASC
 `);
 const DEV_PROXY_CONTAINER = "labcore-dev-proxy-proxy-1";

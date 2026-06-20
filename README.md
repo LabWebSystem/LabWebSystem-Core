@@ -69,6 +69,8 @@
   - `docs/readmes/Lab-Core運用手順書.md`
 - backend OpenAPI 仕様:
   - `core/backend/openapi/openapi.yaml`
+- backend API Trace Map:
+  - `docs/readmes/バックエンドAPIトレースマップ.md`
 - 適合アプリ作成ガイド:
   - `docs/readmes/適合アプリ作成ガイド.md`
 - SDK 概要:

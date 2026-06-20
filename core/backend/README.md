@@ -4,8 +4,10 @@
 - Hono ベース API サーバー
 - 内蔵 DNS サーバー（generated hosts を参照）
 - SQLite スキーマ初期化
-- Application / Deployment / Route / Event / Job モデル
-- deploy / stop / resume / restart / rebuild / update / rollback / delete ジョブ
+- Application / Deployment / Route / Event / Operation モデル
+- deploy / stop / resume / restart / rebuild / update-check / update / rollback / delete Operation
+- `jobs` から `operations` への SQLite migration
+- Operation Step / Operation Log / SSE 配信の基盤
 
 ## 主要 API
 - `GET /health`
@@ -16,21 +18,28 @@
 - `GET /api/applications`
 - `POST /api/applications`
 - `GET /api/applications/:applicationId`
+- `PATCH /api/applications/:applicationId`
+- `GET /api/applications/:applicationId/deployment`
 - `PATCH /api/applications/:applicationId/deployment`
-- `POST /api/applications/:applicationId/restart`
-- `POST /api/applications/:applicationId/stop`
-- `POST /api/applications/:applicationId/resume`
-- `POST /api/applications/:applicationId/rebuild`
-- `POST /api/applications/:applicationId/update-check`
-- `POST /api/applications/:applicationId/update`
-- `POST /api/applications/:applicationId/rollback`
-- `DELETE /api/applications/:applicationId`
-- `GET /api/jobs`
+- `GET /api/applications/:applicationId/deployment/inspection`
+- `POST /api/applications/:applicationId/operations`
+- `GET /api/applications/:applicationId/operations`
+- `GET /api/operations/:operationId`
+- `POST /api/operations/:operationId/cancel`
+- `POST /api/operations/:operationId/retry`
+- `GET /api/operations/:operationId/logs`
+- `GET /api/operations/:operationId/logs/stream`
+- `GET /api/applications/:applicationId/runtime-logs`
 - `GET /api/events`
 - `POST /api/infrastructure/sync`
-- `GET /api/logs/:applicationId/services`
-- `GET /api/logs/:applicationId?service=&tail=`
+- `POST /api/applications/import/resolve`
+- `POST /api/applications/import/compose-inspect`
 - `GET /api/testing/registration-fixtures`
+
+## API Trace Map
+- 旧操作 API と新 Operation API の対応表は `docs/readmes/バックエンドAPIトレースマップ.md` を参照
+- `DELETE /api/applications/:applicationId` は正規 API から外し、`type: delete` の Operation に統一
+- `/api/jobs` 系 API は廃止し、Operation 一覧/詳細/retry/cancel に置き換え
 
 ## OpenAPI 仕様
 - 正本: `core/backend/openapi/openapi.yaml`
@@ -65,6 +74,11 @@
 2. `yarn config:set`
 3. backend 単体: `yarn service:backend:up`
 4. 全体起動（推奨、dashboard / api は reverse proxy のドメイン経由）: `yarn system:up`
+
+## migration / backup
+- 既存 SQLite を更新する前に、`core/backend/data/database.sqlite` を退避してから backend を起動してください
+- backend 起動時に `jobs` は `operations` へ冪等移行されます
+- `queued` / `running` の旧未完了レコードは起動時に `interrupted` へ整理されます
 
 ## 保守
 - 破壊的クリーンアップ: `yarn destroy`

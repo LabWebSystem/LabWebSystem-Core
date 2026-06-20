@@ -126,6 +126,8 @@ export function jobStatusLabel(status: string | null | undefined): string {
       return "成功";
     case "failed":
       return "失敗";
+    case "interrupted":
+      return "中断";
     case "cancelled":
       return "キャンセル";
     default:
@@ -138,6 +140,7 @@ export function jobStatusBadgeClass(status: string | null | undefined): string {
     case "succeeded":
       return badgeClassForTone("ok");
     case "failed":
+    case "interrupted":
       return badgeClassForTone("error");
     case "queued":
     case "running":
@@ -154,7 +157,7 @@ export function canCancelJob(job: ApplicationJob): boolean {
 }
 
 export function canRetryJob(job: ApplicationJob): boolean {
-  return job.retryable ?? (job.status === "failed" && job.related_application_id !== null);
+  return job.retryable ?? ((job.status === "failed" || job.status === "interrupted") && job.related_application_id !== null);
 }
 
 export function canDeleteJob(job: ApplicationJob): boolean {
@@ -165,6 +168,8 @@ export function applicationStatusMeta(status: string): { label: string; tone: To
   switch (status) {
     case "Build Pending":
       return { label: "追加受付済み", tone: "info", description: "登録は完了しています。初回デプロイ待ちです。" };
+    case "Registered":
+      return { label: "登録済み", tone: "info", description: "設定登録は完了しています。Operation 作成待ちです。" };
     case "Cloning":
       return { label: "取得中", tone: "info", description: "リポジトリを取得しています。" };
     case "Deploying":
@@ -181,6 +186,8 @@ export function applicationStatusMeta(status: string): { label: string; tone: To
       return { label: "再構築中", tone: "warn", description: "再ビルドまたは再生成処理を進めています。" };
     case "Deleting":
       return { label: "削除中", tone: "warn", description: "削除ジョブを実行しています。" };
+    case "Deleted":
+      return { label: "削除済み", tone: "inactive", description: "論理削除され、通常一覧から除外されます。" };
     default:
       return { label: status, tone: "neutral", description: "状態を判定できません。" };
   }

@@ -1,5 +1,6 @@
 export type ApplicationStatus =
   | "Draft"
+  | "Registered"
   | "Cloning"
   | "Build Pending"
   | "Deploying"
@@ -8,7 +9,8 @@ export type ApplicationStatus =
   | "Stopped"
   | "Failed"
   | "Rebuilding"
-  | "Deleting";
+  | "Deleting"
+  | "Deleted";
 
 export type DeploymentMode = "standard" | "headless";
 
@@ -28,3 +30,16 @@ export type JobType =
   | "restart";
 
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+
+export type OperationType =
+  | "deploy"
+  | "restart"
+  | "stop"
+  | "resume"
+  | "rebuild"
+  | "update-check"
+  | "update"
+  | "rollback"
+  | "delete";
+
+export type OperationStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "interrupted";

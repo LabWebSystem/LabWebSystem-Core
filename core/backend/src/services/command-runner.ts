@@ -25,11 +25,12 @@ function trimOutput(value: string, maxLength = 4000): string {
 export async function runCommand(
   command: string,
   args: string[],
-  options: SpawnOptionsWithoutStdio = {}
+  options: SpawnOptionsWithoutStdio & { executionModeOverride?: "dry-run" | "execute" } = {}
 ): Promise<CommandResult> {
   const formatted = formatCommand(command, args);
+  const executionMode = options.executionModeOverride ?? env.executionMode;
 
-  if (env.executionMode === "dry-run") {
+  if (executionMode === "dry-run") {
     return {
       command: formatted,
       stdout: "[dry-run] command execution skipped",

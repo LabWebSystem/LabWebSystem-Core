@@ -175,37 +175,44 @@ async function probeTcp(host: string, port: number): Promise<{ reachable: boolea
 
 systemRouter.get("/status", async (c) => {
   const totalApps = Number(
-    (db.prepare("SELECT COUNT(*) as count FROM applications").get() as { count: number } | undefined)?.count ?? 0
+    (
+      db.prepare("SELECT COUNT(*) as count FROM applications WHERE deleted_at IS NULL").get() as
+        | { count: number }
+        | undefined
+    )?.count ?? 0
   );
   const runningApps = Number(
     (
-      db.prepare("SELECT COUNT(*) as count FROM applications WHERE status = 'Running'").get() as
+      db.prepare("SELECT COUNT(*) as count FROM applications WHERE deleted_at IS NULL AND status = 'Running'").get() as
         | { count: number }
         | undefined
     )?.count ?? 0
   );
   const degradedApps = Number(
     (
-      db.prepare("SELECT COUNT(*) as count FROM applications WHERE status = 'Degraded'").get() as
+      db.prepare("SELECT COUNT(*) as count FROM applications WHERE deleted_at IS NULL AND status = 'Degraded'").get() as
         | { count: number }
         | undefined
     )?.count ?? 0
   );
   const failedApps = Number(
     (
-      db.prepare("SELECT COUNT(*) as count FROM applications WHERE status = 'Failed'").get() as
+      db.prepare("SELECT COUNT(*) as count FROM applications WHERE deleted_at IS NULL AND status = 'Failed'").get() as
         | { count: number }
         | undefined
     )?.count ?? 0
   );
 
   const queuedJobs = Number(
-    (db.prepare("SELECT COUNT(*) as count FROM jobs WHERE status = 'queued'").get() as { count: number } | undefined)
-      ?.count ?? 0
+    (
+      db.prepare("SELECT COUNT(*) as count FROM operations WHERE status = 'queued'").get() as
+        | { count: number }
+        | undefined
+    )?.count ?? 0
   );
   const runningJobs = Number(
     (
-      db.prepare("SELECT COUNT(*) as count FROM jobs WHERE status = 'running'").get() as
+      db.prepare("SELECT COUNT(*) as count FROM operations WHERE status = 'running'").get() as
         | { count: number }
         | undefined
     )?.count ?? 0
