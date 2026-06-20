@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
-import { cors } from "hono/cors";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { db, nowIso } from "./lib/db.js";
 import { env } from "./lib/env.js";
@@ -9,11 +9,10 @@ import { createApplicationsApiRouter } from "./modules/applications/application.
 import { recordSystemEvent } from "./modules/events/event.repository.js";
 import { InMemoryOperationEventBus } from "./modules/operations/operation-events.js";
 import { OperationLogRepository } from "./modules/operations/operation-log.repository.js";
-import { createOperationsApiRouter } from "./modules/operations/operation.routes.js";
 import { OperationRunner } from "./modules/operations/operation-runner.js";
+import { createOperationsApiRouter } from "./modules/operations/operation.routes.js";
 import { OperationService } from "./modules/operations/operation.service.js";
 import { getOpenApiDocument, getOpenApiYaml } from "./openapi.js";
-import { applicationsRouter } from "./routes/applications.js";
 import { eventsRouter } from "./routes/events.js";
 import { infrastructureRouter } from "./routes/infrastructure.js";
 import { systemRouter } from "./routes/system.js";
@@ -23,12 +22,15 @@ import { recordEvent } from "./services/events.js";
 import { syncInfrastructure } from "./services/infrastructure-sync.js";
 
 const app = new Hono();
+
 const operationEventBus = new InMemoryOperationEventBus();
+
 const operationRunner = new OperationRunner({
   db,
   eventBus: operationEventBus,
   syncInfrastructure
 });
+
 const operationService = new OperationService({
   db,
   eventBus: operationEventBus,
@@ -37,6 +39,7 @@ const operationService = new OperationService({
     void operationRunner.executeOperation(operationId);
   }
 });
+
 const operationLogRepository = new OperationLogRepository(db);
 
 app.use("*", logger());
@@ -44,12 +47,27 @@ app.use("/api/*", cors());
 app.use("/api/*", requestIdMiddleware);
 
 app.get("/health", (c) => {
-  return c.json({ ok: true, timestamp: nowIso() });
+  return c.json({
+    ok: true,
+    timestamp: nowIso()
+  });
 });
 
-app.route("/api/applications", createApplicationsApiRouter({ db, operationService }));
-app.route("/api/applications", applicationsRouter);
-app.route("/api/operations", createOperationsApiRouter({ operationService }));
+app.route(
+  "/api/applications",
+  createApplicationsApiRouter({
+    db,
+    operationService
+  })
+);
+
+app.route(
+  "/api/operations",
+  createOperationsApiRouter({
+    operationService
+  })
+);
+
 app.route("/api/system", systemRouter);
 app.route("/api/events", eventsRouter);
 app.route("/api/infrastructure", infrastructureRouter);
@@ -78,8 +96,13 @@ app.get("/api/openapi.yaml", (c) => {
 });
 
 const currentEventCount = Number(
-  (db.prepare("SELECT COUNT(*) as count FROM system_events").get() as { count: number } | undefined)?.count ?? 0
+  (
+    db
+      .prepare("SELECT COUNT(*) as count FROM system_events")
+      .get() as { count: number } | undefined
+  )?.count ?? 0
 );
+
 if (currentEventCount === 0) {
   recordEvent({
     scope: "system",
@@ -90,6 +113,7 @@ if (currentEventCount === 0) {
 }
 
 const interruptedOperations = await operationService.markIncompleteOperationsAsInterrupted();
+
 if (interruptedOperations.length > 0) {
   recordSystemEvent(db, {
     scope: "system",
@@ -100,8 +124,15 @@ if (interruptedOperations.length > 0) {
   });
 }
 
-const logRetentionCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-const deletedLogCount = operationLogRepository.deleteLogsForCompletedOperationsBefore(logRetentionCutoff);
+const logRetentionCutoff = new Date(
+  Date.now() - 30 * 24 * 60 * 60 * 1000
+).toISOString();
+
+const deletedLogCount =
+  operationLogRepository.deleteLogsForCompletedOperationsBefore(
+    logRetentionCutoff
+  );
+
 if (deletedLogCount > 0) {
   recordSystemEvent(db, {
     scope: "system",
