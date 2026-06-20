@@ -144,11 +144,53 @@ function parseEnvOverrides(value: string): Record<string, string> {
   }
 }
 
+function normalizeSandboxDataSubpath(rawValue: string): string {
+  const normalized = rawValue.replace(/\\/g, "/").trim().replace(/\/+$/, "");
+  if (normalized === "" || normalized === "/data") {
+    return "";
+  }
+
+  if (normalized.startsWith("/data/")) {
+    return normalized.slice("/data/".length);
+  }
+
+  for (const marker of ["/.appdata/", ".appdata/", "/appdata/", "appdata/"]) {
+    const index = normalized.lastIndexOf(marker);
+    if (index >= 0) {
+      const suffix = normalized.slice(index + marker.length);
+      return suffix.replace(/^\/+/, "");
+    }
+  }
+
+  const trimmed = normalized
+    .replace(/^(\.\.\/)+/, "")
+    .replace(/^(\.\/)+/, "")
+    .replace(/^\/+/, "");
+
+  return trimmed;
+}
+
+export function normalizeAppDataRootEnv(rawValue: string | undefined): string {
+  const normalizedSubpath = normalizeSandboxDataSubpath(rawValue ?? "");
+  if (normalizedSubpath.length === 0) {
+    return "/data";
+  }
+
+  const safeSegments = normalizedSubpath
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0 && segment !== "." && segment !== "..");
+
+  return safeSegments.length === 0 ? "/data" : `/data/${safeSegments.join("/")}`;
+}
+
 function buildManagedComposeEnv(target: RuntimeApplicationTarget): Record<string, string> {
   const appRoot = getApplicationRoot(target.application_id);
   const sourceRoot = getApplicationSourceRoot(target.application_id);
   const dataRoot = getApplicationDataRoot(target.application_id);
   const envOverrides = parseEnvOverrides(target.env_overrides);
+
+  envOverrides.APPDATA_ROOT = normalizeAppDataRootEnv(envOverrides.APPDATA_ROOT);
 
   return {
     ...envOverrides,
