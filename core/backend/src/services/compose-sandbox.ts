@@ -178,8 +178,42 @@ function assertNoDockerSocketSource(sourcePath: string, fieldLabel: string): voi
   }
 }
 
+function splitVolumeSpec(value: string): string[] {
+  const segments: string[] = [];
+  let current = "";
+  let templateDepth = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]!;
+    const next = value[index + 1];
+
+    if (char === "$" && next === "{") {
+      templateDepth += 1;
+      current += char;
+      continue;
+    }
+
+    if (char === "}" && templateDepth > 0) {
+      templateDepth -= 1;
+      current += char;
+      continue;
+    }
+
+    if (char === ":" && templateDepth === 0) {
+      segments.push(current);
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  segments.push(current);
+  return segments;
+}
+
 function parseShortVolume(value: string): { source: string | null; target: string; mode: string | null } {
-  const segments = value.split(":");
+  const segments = splitVolumeSpec(value);
 
   if (segments.length === 1) {
     return {
@@ -338,17 +372,30 @@ function rewriteBuild(buildValue: unknown, options: {
   }
 
   const nextBuild: JsonRecord = { ...buildValue };
+  let resolvedContextPath: string | null = null;
 
   if (typeof buildValue.context === "string") {
     const expandedContext = expandTemplateString(buildValue.context, options.envValues);
     assertNoUnresolvedPathVariables(expandedContext, `${fieldLabel}.context`, buildValue.context);
-    nextBuild.context = resolveSourceScopedPath(expandedContext.value, options, `${fieldLabel}.context`);
+    resolvedContextPath = resolveSourceScopedPath(expandedContext.value, options, `${fieldLabel}.context`);
+    nextBuild.context = resolvedContextPath;
   }
 
   if (typeof buildValue.dockerfile === "string") {
     const expandedDockerfile = expandTemplateString(buildValue.dockerfile, options.envValues);
     assertNoUnresolvedPathVariables(expandedDockerfile, `${fieldLabel}.dockerfile`, buildValue.dockerfile);
-    nextBuild.dockerfile = resolveSourceScopedPath(expandedDockerfile.value, options, `${fieldLabel}.dockerfile`);
+    const dockerfileBaseDir = resolvedContextPath ?? options.composeDir;
+    const resolvedDockerfilePath = resolveSourceScopedPath(
+      path.isAbsolute(expandedDockerfile.value)
+        ? expandedDockerfile.value
+        : path.resolve(dockerfileBaseDir, expandedDockerfile.value),
+      options,
+      `${fieldLabel}.dockerfile`
+    );
+
+    nextBuild.dockerfile = path.isAbsolute(expandedDockerfile.value) || !resolvedContextPath
+      ? resolvedDockerfilePath
+      : path.relative(resolvedContextPath, resolvedDockerfilePath).replace(/\\/g, "/");
   }
 
   return nextBuild;

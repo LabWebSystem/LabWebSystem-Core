@@ -69,6 +69,46 @@ test("rewrites bind mounts and named volumes into the application sandbox", () =
   });
 });
 
+test("keeps dockerfile relative to build context and preserves env defaults in short volume syntax", () => {
+  withRuntimeRoots(({ appRoot, sourceRoot, dataRoot, labCoreRoot }) => {
+    const result = sandboxComposeForRuntime({
+      rawCompose: {
+        services: {
+          api: {
+            build: {
+              context: "./api",
+              dockerfile: "Dockerfile"
+            },
+            volumes: [
+              "${APPDATA_ROOT:-/data/postgres}:/var/lib/postgresql/data"
+            ]
+          }
+        }
+      },
+      applicationId: "app-123",
+      composePath: "docker-compose.yml",
+      sourceRoot,
+      appRoot,
+      dataRoot,
+      labCoreRoot,
+      envValues: {}
+    });
+
+    const api = (result.normalizedCompose.services as Record<string, {
+      build: { context: string; dockerfile: string };
+      volumes: string[];
+    }>).api;
+
+    assert.deepEqual(api.build, {
+      context: path.join(sourceRoot, "api"),
+      dockerfile: "Dockerfile"
+    });
+    assert.deepEqual(api.volumes, [
+      path.join(appRoot, "data", "postgres") + ":/var/lib/postgresql/data"
+    ]);
+  });
+});
+
 test("rejects ports and direct device declarations", () => {
   withRuntimeRoots(({ appRoot, sourceRoot, dataRoot, labCoreRoot }) => {
     assert.throws(
