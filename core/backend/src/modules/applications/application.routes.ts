@@ -21,6 +21,12 @@ import { recordSystemEvent } from "../events/event.repository.js";
 import { OperationConflictError, OperationStateError } from "../operations/operation-errors.js";
 import { parseCreateOperationRequest } from "../operations/operation-schemas.js";
 import type { OperationService } from "../operations/operation.service.js";
+import {
+  inspectImportCompose,
+  inspectImportComposeSchema,
+  resolveImportSchema,
+  resolveImportSource
+} from "./application-import.service.js";
 import { ApplicationRepository } from "./application.repository.js";
 import {
   createApplicationSchema,
@@ -434,6 +440,62 @@ export function createApplicationsApiRouter(options: CreateApplicationsApiRouter
       return jsonError(c, 500, "RUNTIME_LOGS_LOAD_FAILED", message, {
         applicationId
       });
+    }
+  });
+
+  router.post("/import/resolve", async (c) => {
+    const payload = await c.req.json().catch(() => null);
+
+    if (!payload) {
+      return jsonError(c, 400, "INVALID_JSON", "Request body must be valid JSON.");
+    }
+
+    try {
+      const parsed = resolveImportSchema.parse(payload);
+      const resolved = await resolveImportSource(parsed.sourceUrl);
+
+      return c.json(resolved);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return jsonError(c, 400, "INVALID_IMPORT_RESOLVE_REQUEST", "Import resolve request is invalid.", {
+          issues: error.issues
+        });
+      }
+
+      const message =
+        error instanceof Error ? error.message : "Failed to resolve import source.";
+
+      return jsonError(c, 400, "IMPORT_RESOLVE_FAILED", message);
+    }
+  });
+
+  router.post("/import/compose-inspect", async (c) => {
+    const payload = await c.req.json().catch(() => null);
+
+    if (!payload) {
+      return jsonError(c, 400, "INVALID_JSON", "Request body must be valid JSON.");
+    }
+
+    try {
+      const parsed = inspectImportComposeSchema.parse(payload);
+      const inspection = await inspectImportCompose(
+        parsed.repositoryUrl,
+        parsed.branch,
+        parsed.composePath
+      );
+
+      return c.json(inspection);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return jsonError(c, 400, "INVALID_IMPORT_COMPOSE_INSPECT_REQUEST", "Import compose inspect request is invalid.", {
+          issues: error.issues
+        });
+      }
+
+      const message =
+        error instanceof Error ? error.message : "Failed to inspect compose file.";
+
+      return jsonError(c, 400, "IMPORT_COMPOSE_INSPECT_FAILED", message);
     }
   });
 
