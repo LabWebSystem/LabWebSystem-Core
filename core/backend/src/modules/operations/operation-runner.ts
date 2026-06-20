@@ -47,8 +47,19 @@ type DeleteHelperCommand = {
   args: string[];
 };
 
-function resolveSudoExecutableFromPath(): string | null {
-  const pathValue = process.env.PATH ?? "";
+type DeleteHelperCommandResolveOptions = {
+  useSudo?: boolean;
+  uid?: number | null;
+  pathValue?: string;
+  helperPath?: string;
+  nodePath?: string;
+  existsSync?: (candidate: string) => boolean;
+};
+
+function resolveSudoExecutableFromPath(
+  pathValue: string,
+  existsSync: (candidate: string) => boolean
+): string | null {
   const directories = pathValue
     .split(path.delimiter)
     .map((segment) => segment.trim())
@@ -56,13 +67,13 @@ function resolveSudoExecutableFromPath(): string | null {
 
   for (const directory of directories) {
     const candidate = path.join(directory, "sudo");
-    if (fs.existsSync(candidate)) {
+    if (existsSync(candidate)) {
       return candidate;
     }
   }
 
   for (const candidate of ["/usr/bin/sudo", "/bin/sudo", "/usr/local/bin/sudo"]) {
-    if (fs.existsSync(candidate)) {
+    if (existsSync(candidate)) {
       return candidate;
     }
   }
@@ -70,28 +81,39 @@ function resolveSudoExecutableFromPath(): string | null {
   return null;
 }
 
-export function resolveAppRootDeleteHelperCommand(applicationId: string): DeleteHelperCommand {
+export function resolveAppRootDeleteHelperCommand(
+  applicationId: string,
+  options: DeleteHelperCommandResolveOptions = {}
+): DeleteHelperCommand {
+  const useSudo = options.useSudo ?? env.appRootDeleteUsesSudo;
+  const uid = options.uid ?? (typeof process.getuid === "function" ? process.getuid() : null);
+  const pathValue = options.pathValue ?? (process.env.PATH ?? "");
+  const helperPath = options.helperPath ?? env.appRootDeleteHelperPath;
+  const nodePath = options.nodePath ?? process.execPath;
+  const existsSync = options.existsSync ?? fs.existsSync;
   const directCommand = {
-    executable: process.execPath,
-    args: [env.appRootDeleteHelperPath, applicationId]
+    executable: nodePath,
+    args: [helperPath, applicationId]
   };
 
-  if (!env.appRootDeleteUsesSudo) {
+  if (!useSudo) {
     return directCommand;
   }
 
-  if (typeof process.getuid === "function" && process.getuid() === 0) {
+  if (uid === 0) {
     return directCommand;
   }
 
-  const sudoExecutable = resolveSudoExecutableFromPath();
+  const sudoExecutable = resolveSudoExecutableFromPath(pathValue, existsSync);
   if (!sudoExecutable) {
-    return directCommand;
+    throw new Error(
+      "sudo が見つからないため app root 削除 helper を昇格実行できません。`LAB_CORE_APP_ROOT_DELETE_USE_SUDO=false` を明示するか、sudo を導入してください。"
+    );
   }
 
   return {
     executable: sudoExecutable,
-    args: ["--non-interactive", process.execPath, env.appRootDeleteHelperPath, applicationId]
+    args: ["--non-interactive", nodePath, helperPath, applicationId]
   };
 }
 

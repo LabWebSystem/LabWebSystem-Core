@@ -201,8 +201,15 @@ function buildManagedComposeEnv(target: RuntimeApplicationTarget): Record<string
   };
 }
 
+function isSensitiveEnvKey(key: string): boolean {
+  return /(TOKEN|PASSWORD|SECRET|API_KEY|AUTHORIZATION)/i.test(key);
+}
+
 export function getSecretValues(target: RuntimeApplicationTarget): string[] {
-  return Object.values(buildManagedComposeEnv(target)).filter((value) => value.trim().length > 0);
+  const envOverrides = parseEnvOverrides(target.env_overrides);
+  return Object.entries(envOverrides)
+    .filter(([key, value]) => isSensitiveEnvKey(key) && value.trim().length > 0)
+    .map(([, value]) => value);
 }
 
 function quoteEnvFileValue(value: string): string {
