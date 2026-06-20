@@ -12,6 +12,7 @@
   },
   "scripts": {
     "launcher": "corepack yarn tsx scripts/tasks/interactive-tasks.ts",
+    "init": "corepack yarn tsx scripts/dev/root-command.ts config:set",
     "config:set": "corepack yarn tsx scripts/dev/root-command.ts config:set",
     "config:show": "corepack yarn tsx scripts/dev/root-command.ts config:show",
     "config:edit": "corepack yarn tsx scripts/dev/root-command.ts config:edit",
