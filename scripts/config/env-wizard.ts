@@ -16,6 +16,12 @@ interface IpCandidate {
   iface: string;
 }
 
+interface IpChoice {
+  name: string;
+  value: string;
+  description?: string;
+}
+
 const command = process.argv[2] ?? "init";
 const thisFile = fileURLToPath(import.meta.url);
 const rootDir = path.resolve(path.dirname(thisFile), "..", "..");
@@ -183,6 +189,41 @@ function buildProfileInputDefaults(profile: ProfileKey, candidates: IpCandidate[
     LAB_CORE_SSH_SERVICE_IP: "127.0.0.1",
     LAB_CORE_ROOT_DOMAIN: "lab.localhost"
   };
+}
+
+function buildIpChoices(currentValue: string, candidates: IpCandidate[]): IpChoice[] {
+  const choices: IpChoice[] = [];
+  const seen = new Set<string>();
+
+  if (isValidIpv4(currentValue)) {
+    choices.push({
+      name: `${currentValue} を使う`,
+      value: currentValue,
+      description: "現在の既定値をそのまま採用します。"
+    });
+    seen.add(currentValue);
+  }
+
+  for (const candidate of candidates) {
+    if (seen.has(candidate.address)) {
+      continue;
+    }
+
+    choices.push({
+      name: `${candidate.address} (${candidate.iface})`,
+      value: candidate.address,
+      description: "検出した IPv4 候補を採用します。"
+    });
+    seen.add(candidate.address);
+  }
+
+  choices.push({
+    name: "手入力する",
+    value: "__manual__",
+    description: "候補にない IP を直接入力します。"
+  });
+
+  return choices;
 }
 
 function profileLabel(profileKey: ProfileKey): string {
@@ -389,6 +430,10 @@ function printWizardIntro(selectedProfile: ProfileKey, candidates: IpCandidate[]
   console.log("3) Root domain");
   console.log("その他の値は選択プロファイルの既定値を使います。");
 
+  if (candidates.length > 0) {
+    console.log("\n検出した IPv4 候補から Main/SSH 用 IP を選択できます。");
+  }
+
   if (selectedProfile === "lab" && candidates.length > 0) {
     const detected = candidates
       .slice(0, 3)
@@ -406,15 +451,39 @@ async function promptIpv4Field(message: string, defaultValue: string): Promise<s
   });
 }
 
-async function promptUserValues(values: EnvValues): Promise<void> {
-  values.LAB_CORE_MAIN_SERVICE_IP = await promptIpv4Field(
-    "Main service IP を入力してください",
-    values.LAB_CORE_MAIN_SERVICE_IP
+async function promptIpv4Value(
+  label: string,
+  currentValue: string,
+  candidates: IpCandidate[]
+): Promise<string> {
+  if (candidates.length === 0) {
+    return promptIpv4Field(`${label} を入力してください`, currentValue);
+  }
+
+  const selected = await select({
+    message: `${label} を選択してください`,
+    choices: buildIpChoices(currentValue, candidates),
+    pageSize: Math.min(candidates.length + 2, 8)
+  });
+
+  if (selected === "__manual__") {
+    return promptIpv4Field(`${label} を入力してください`, currentValue);
+  }
+
+  return selected;
+}
+
+async function promptUserValues(values: EnvValues, candidates: IpCandidate[]): Promise<void> {
+  values.LAB_CORE_MAIN_SERVICE_IP = await promptIpv4Value(
+    "Main service IP",
+    values.LAB_CORE_MAIN_SERVICE_IP,
+    candidates
   );
 
-  values.LAB_CORE_SSH_SERVICE_IP = await promptIpv4Field(
-    "SSH service IP を入力してください",
-    values.LAB_CORE_SSH_SERVICE_IP
+  values.LAB_CORE_SSH_SERVICE_IP = await promptIpv4Value(
+    "SSH service IP",
+    values.LAB_CORE_SSH_SERVICE_IP,
+    candidates
   );
 
   values.LAB_CORE_ROOT_DOMAIN = await input({
@@ -458,7 +527,7 @@ async function run(): Promise<void> {
   const values = buildInitialValues(selectedProfile, existingValues, existingAction === "inherit", candidates);
 
   printWizardIntro(selectedProfile, candidates);
-  await promptUserValues(values);
+  await promptUserValues(values, candidates);
   printPreview(selectedProfile, values);
 
   const confirmed = await confirm({
