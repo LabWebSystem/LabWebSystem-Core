@@ -1,6 +1,8 @@
 import type Database from "better-sqlite3";
-import { nanoid } from "nanoid";
+import { customAlphabet, nanoid } from "nanoid";
 import { buildComposeProjectName } from "../../services/compose-project.js";
+
+const generateApplicationId = customAlphabet("0123456789abcdefghijklmnopqrstuvwxyz", 24);
 
 function parseJsonList(value: string): string[] {
   try {
@@ -53,10 +55,10 @@ export class ApplicationRepository {
     },
     timestamp: string
   ) {
-    const applicationId = nanoid();
+    const applicationId = generateApplicationId();
     const deploymentId = nanoid();
     const routeId = nanoid();
-    const composeProjectName = buildComposeProjectName(applicationId, input.name);
+    const composeProjectName = buildComposeProjectName(applicationId);
 
     const tx = this.db.transaction(() => {
       this.db

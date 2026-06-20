@@ -175,6 +175,11 @@ export const env = {
     process.env.LAB_CORE_DNS_HOSTS_PATH ?? "./core/backend/data/generated/fukaya-sus.hosts"
   ),
   generatedSyncDir: toAbsolutePath(baseDir, process.env.LAB_CORE_SYNC_DIR ?? "./core/backend/data/generated"),
+  appRootDeleteHelperPath: toAbsolutePath(
+    baseDir,
+    process.env.LAB_CORE_APP_ROOT_DELETE_HELPER_PATH ?? "./core/backend/scripts/delete-app-root.mjs"
+  ),
+  appRootDeleteUsesSudo: toBoolean(process.env.LAB_CORE_APP_ROOT_DELETE_USE_SUDO, true),
   dnsServerEnabled: toBoolean(process.env.LAB_CORE_DNS_SERVER_ENABLED, true),
   dnsBindHost: parseHostPort(process.env.LAB_CORE_DNS_BIND)?.host ?? process.env.LAB_CORE_DNS_BIND_HOST ?? "127.0.0.1",
   dnsPort: parseHostPort(process.env.LAB_CORE_DNS_BIND)?.port ?? toPort(process.env.LAB_CORE_DNS_PORT, defaultDnsPort()),

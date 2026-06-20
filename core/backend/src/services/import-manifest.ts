@@ -3,6 +3,8 @@ import { parse } from "yaml";
 import { z } from "zod";
 
 const deploymentModeSchema = z.enum(["standard", "headless"]);
+const deviceSlotIdSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
+const deviceSlotEnvSchema = z.string().regex(/^[A-Z_][A-Z0-9_]*$/);
 
 export const labcoreManifestSchema = z.object({
   schemaVersion: z.number().int().min(1).default(1),
@@ -35,6 +37,17 @@ export const labcoreManifestSchema = z.object({
     required: z.array(z.string().min(1)).default([]),
     defaults: z.record(z.string().min(1), z.string()).default({})
   }).default({ required: [], defaults: {} }),
+  runtime: z.object({
+    device_slots: z.record(
+      deviceSlotIdSchema,
+      z.object({
+        service: z.string().min(1),
+        env: z.array(deviceSlotEnvSchema).min(1),
+        accepted_types: z.array(z.string().min(1)).default([]),
+        required: z.boolean().default(false)
+      })
+    ).default({})
+  }).default({ device_slots: {} }),
   profiles: z.object({
     default: z.string().min(1).default("dev-sim")
   }).default({ default: "dev-sim" })

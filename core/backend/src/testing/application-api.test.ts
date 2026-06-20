@@ -59,6 +59,7 @@ test("creates applications without auto-enqueuing deploy operations and filters 
     message: string;
   };
   assert.equal(typeof created.applicationId, "string");
+  assert.match(created.applicationId, /^[a-z0-9][a-z0-9_-]{0,127}$/);
   assert.match(created.message, /registered/i);
 
   const operationCount = db

@@ -2,10 +2,21 @@ import fs from "node:fs";
 import path from "node:path";
 import type Database from "better-sqlite3";
 import { simpleGit } from "simple-git";
+import { parseDocument, stringify } from "yaml";
 import { env } from "../../lib/env.js";
 import { runCommand } from "../../services/command-runner.js";
 import { chooseRecommendedComposeService, inspectComposeYaml } from "../../services/compose-inspection.js";
 import { resolveComposeProjectName } from "../../services/compose-project.js";
+import {
+  ensureApplicationRuntimeLayout,
+  getApplicationDataRoot,
+  getApplicationLabCoreRoot,
+  getApplicationRoot,
+  getApplicationSourceRoot,
+  getGeneratedComposeEnvPath,
+  getNormalizedComposePath
+} from "../../services/application-paths.js";
+import { sandboxComposeForRuntime } from "../../services/compose-sandbox.js";
 
 export type RuntimeApplicationTarget = {
   application_id: string;
@@ -60,12 +71,12 @@ export function getRuntimeApplicationTarget(db: Database.Database, applicationId
   return row;
 }
 
-export function getRepositoryPath(applicationName: string): string {
-  return path.join(env.appsRoot, applicationName);
+export function getRepositoryPath(applicationId: string): string {
+  return getApplicationSourceRoot(applicationId);
 }
 
-export function getAppDataPath(applicationName: string): string {
-  return path.join(env.appDataRoot, applicationName);
+export function getAppDataPath(applicationId: string): string {
+  return getApplicationDataRoot(applicationId);
 }
 
 export function setApplicationStatus(
@@ -133,8 +144,23 @@ function parseEnvOverrides(value: string): Record<string, string> {
   }
 }
 
+function buildManagedComposeEnv(target: RuntimeApplicationTarget): Record<string, string> {
+  const appRoot = getApplicationRoot(target.application_id);
+  const sourceRoot = getApplicationSourceRoot(target.application_id);
+  const dataRoot = getApplicationDataRoot(target.application_id);
+  const envOverrides = parseEnvOverrides(target.env_overrides);
+
+  return {
+    ...envOverrides,
+    LABCORE_APP_ID: target.application_id,
+    LABCORE_APP_ROOT: appRoot,
+    LABCORE_APP_SOURCE_ROOT: sourceRoot,
+    LABCORE_APP_DATA_ROOT: dataRoot
+  };
+}
+
 export function getSecretValues(target: RuntimeApplicationTarget): string[] {
-  return Object.values(parseEnvOverrides(target.env_overrides)).filter((value) => value.trim().length > 0);
+  return Object.values(buildManagedComposeEnv(target)).filter((value) => value.trim().length > 0);
 }
 
 function quoteEnvFileValue(value: string): string {
@@ -146,22 +172,83 @@ function quoteEnvFileValue(value: string): string {
 }
 
 export function writeComposeEnvFile(target: RuntimeApplicationTarget): string | null {
-  const envOverrides = parseEnvOverrides(target.env_overrides);
+  const envOverrides = buildManagedComposeEnv(target);
   const entries = Object.entries(envOverrides).filter(([, value]) => value.trim().length > 0);
   if (entries.length === 0) {
     return null;
   }
 
-  const appDataPath = getAppDataPath(target.name);
-  fs.mkdirSync(appDataPath, { recursive: true });
-
-  const envFilePath = path.join(appDataPath, ".lab-core.compose.env");
+  ensureApplicationRuntimeLayout(target.application_id);
+  const envFilePath = getGeneratedComposeEnvPath(target.application_id);
   const lines = entries
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([key, value]) => `${key}=${quoteEnvFileValue(value)}`);
 
   fs.writeFileSync(envFilePath, `${lines.join("\n")}\n`, "utf8");
   return envFilePath;
+}
+
+function buildDryRunCompose(target: RuntimeApplicationTarget): string {
+  return stringify({
+    services: {
+      [target.public_service_name]: {
+        image: "busybox:stable",
+        command: ["sh", "-c", "sleep infinity"],
+        expose: [String(target.public_port)]
+      }
+    }
+  });
+}
+
+export function prepareComposeRuntime(
+  target: RuntimeApplicationTarget,
+  repoPath: string,
+  executionMode: "dry-run" | "execute" = env.executionMode
+): { composeFilePath: string; envFilePath: string | null } {
+  ensureApplicationRuntimeLayout(target.application_id);
+
+  const sourceComposePath = path.resolve(repoPath, target.compose_path);
+  const normalizedComposePath = getNormalizedComposePath(target.application_id);
+  const envFilePath = writeComposeEnvFile(target);
+
+  let rawComposeText = "";
+
+  if (fs.existsSync(sourceComposePath)) {
+    rawComposeText = fs.readFileSync(sourceComposePath, "utf8");
+  } else if (executionMode === "dry-run") {
+    rawComposeText = buildDryRunCompose(target);
+  } else {
+    throw new Error(`compose ファイルが見つかりません: ${sourceComposePath}`);
+  }
+
+  const parsedDocument = parseDocument(rawComposeText, {
+    merge: true,
+    prettyErrors: false,
+    uniqueKeys: false
+  });
+
+  if (parsedDocument.errors.length > 0) {
+    throw new Error(parsedDocument.errors.map((error) => error.message.trim()).join("\n"));
+  }
+
+  const rawCompose = parsedDocument.toJS({ maxAliasCount: 100 });
+  const sandboxed = sandboxComposeForRuntime({
+    rawCompose,
+    applicationId: target.application_id,
+    composePath: target.compose_path,
+    sourceRoot: repoPath,
+    appRoot: getApplicationRoot(target.application_id),
+    dataRoot: getApplicationDataRoot(target.application_id),
+    labCoreRoot: getApplicationLabCoreRoot(target.application_id),
+    envValues: buildManagedComposeEnv(target)
+  });
+
+  fs.writeFileSync(normalizedComposePath, sandboxed.normalizedYaml, "utf8");
+
+  return {
+    composeFilePath: normalizedComposePath,
+    envFilePath
+  };
 }
 
 function buildComposeArgs(
@@ -186,21 +273,21 @@ export async function ensureRepository(
   target: RuntimeApplicationTarget,
   executionMode: "dry-run" | "execute" = env.executionMode
 ): Promise<{ repoPath: string; headCommit: string }> {
-  const repoPath = getRepositoryPath(target.name);
+  const repoPath = getRepositoryPath(target.application_id);
   const repoExists = fs.existsSync(path.join(repoPath, ".git"));
 
   if (executionMode === "dry-run") {
+    ensureApplicationRuntimeLayout(target.application_id);
     return {
       repoPath,
       headCommit: dryRunCommit("dry-run")
     };
   }
 
-  fs.mkdirSync(env.appsRoot, { recursive: true });
-  fs.mkdirSync(env.appDataRoot, { recursive: true });
+  ensureApplicationRuntimeLayout(target.application_id);
 
   if (!repoExists) {
-    await simpleGit(env.appsRoot).clone(target.repository_url, target.name, ["--branch", target.default_branch, "--single-branch"]);
+    await simpleGit().clone(target.repository_url, repoPath, ["--branch", target.default_branch, "--single-branch"]);
   } else {
     const git = simpleGit(repoPath);
     await git.fetch();
