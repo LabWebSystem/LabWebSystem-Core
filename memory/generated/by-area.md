@@ -9,3 +9,4 @@
 - CHG-002 | ACTIVE | - | system 起動時の backend/dashboard 直公開を廃止
 - CHG-003 | ACTIVE | - | Operation 基盤と jobs→operations migration の土台を追加
 - CHG-004 | ACTIVE | - | Application 正規API・Operation Runner・OpenAPI/README・dashboard API client を同期更新
+- CHG-005 | ACTIVE | - | destroy コマンドを soft / hard に分離

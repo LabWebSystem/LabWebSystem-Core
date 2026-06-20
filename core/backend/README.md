@@ -81,9 +81,13 @@
 - `queued` / `running` の旧未完了レコードは起動時に `interrupted` へ整理されます
 
 ## 保守
-- 破壊的クリーンアップ: `yarn destroy`
-  - `.env` は保持
-  - DB/生成物/runtime/Docker 管理資産を削除
+- 破壊的クリーンアップ:
+  - `yarn destroy` / `yarn destroy:soft`
+    - `.env` / DB / volume / backup / runtime app data を保持
+    - Lab-Core とデプロイ済みアプリの container / network / generated artifact を削除
+  - `yarn destroy:hard`
+    - `.env` と Git worktree を保持
+    - DB / volume / backup / runtime app data を含む Lab-Core 管理資産を削除
 - 権限修復: `yarn permissions:repair`
   - 以前 root で作られた `core/backend/data/database.sqlite` や `runtime/` 配下を現在ユーザーへ戻す
   - `SqliteError: attempt to write a readonly database` が出たときの復旧に使う

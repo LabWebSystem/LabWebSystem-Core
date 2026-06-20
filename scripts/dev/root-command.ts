@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 type ComposeKey = "core" | "proxy" | "dns";
-type CommandHandler = () => void | Promise<void>;
+type CommandHandler = (args: string[]) => void | Promise<void>;
 
 interface RunOptions {
   env?: NodeJS.ProcessEnv;
@@ -306,9 +306,9 @@ function systemLogs(): void {
 }
 
 function deprecatedEnvironmentCommand(oldName: string, newName: string, handler: CommandHandler): CommandHandler {
-  return async () => {
+  return async (args) => {
     console.warn(`[deprecated] yarn ${oldName} は非推奨です。代わりに yarn ${newName} を使用してください。`);
-    await handler();
+    await handler(args);
   };
 }
 
@@ -338,7 +338,9 @@ const commands: Record<string, CommandHandler> = {
   "quality:typecheck:scripts": () => run("corepack", ["yarn", "tsc", "-p", "tsconfig.scripts.json"]),
   "quality:test:fixtures": () => run("bash", ["scripts/testing/register_app_fixtures.sh"]),
   "quality:test:smoke": () => run("bash", ["scripts/testing/run_full_system_smoke_test.sh"]),
-  destroy: () => runTsScript("scripts/maintenance/reset-lab-core.ts")
+  destroy: (args) => runTsScript("scripts/maintenance/reset-lab-core.ts", [...args, "--mode", "soft"]),
+  "destroy:soft": (args) => runTsScript("scripts/maintenance/reset-lab-core.ts", [...args, "--mode", "soft"]),
+  "destroy:hard": (args) => runTsScript("scripts/maintenance/reset-lab-core.ts", [...args, "--mode", "hard"])
 };
 
 function printUsageAndExit(): never {
@@ -356,9 +358,10 @@ const commandName = process.argv[2];
 if (!commandName || !(commandName in commands)) {
   printUsageAndExit();
 }
+const commandArgs = process.argv.slice(3);
 
 Promise.resolve()
-  .then(() => commands[commandName]())
+  .then(() => commands[commandName](commandArgs))
   .catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[root-command] failed: ${message}`);

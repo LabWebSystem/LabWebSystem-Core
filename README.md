@@ -49,10 +49,13 @@
 - 品質確認:
   - `yarn quality:build`
   - `yarn quality:typecheck:scripts`
+  - `yarn quality:test:scripts`
   - `yarn quality:test:fixtures`
   - `yarn quality:test:smoke`
 - 破壊的クリーンアップ（確認付き）:
-  - `yarn destroy`
+  - `yarn destroy` (`yarn destroy:soft` と同じ)
+  - `yarn destroy:soft`
+  - `yarn destroy:hard`
 
 ## 注意事項
 - `.env` 再作成時はバックアップが自動作成されます。

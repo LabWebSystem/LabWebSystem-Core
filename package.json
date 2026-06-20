@@ -16,6 +16,8 @@
     "config:show": "corepack yarn tsx scripts/dev/root-command.ts config:show",
     "config:edit": "corepack yarn tsx scripts/dev/root-command.ts config:edit",
     "destroy": "corepack yarn tsx scripts/dev/root-command.ts destroy",
+    "destroy:soft": "corepack yarn tsx scripts/dev/root-command.ts destroy:soft",
+    "destroy:hard": "corepack yarn tsx scripts/dev/root-command.ts destroy:hard",
     "system:up": "corepack yarn tsx scripts/dev/root-command.ts system:up",
     "system:down": "corepack yarn tsx scripts/dev/root-command.ts system:down",
     "system:logs": "corepack yarn tsx scripts/dev/root-command.ts system:logs",
@@ -24,6 +26,7 @@
     "service:dashboard:up": "corepack yarn tsx scripts/dev/root-command.ts service:dashboard:up",
     "quality:build": "corepack yarn tsx scripts/dev/root-command.ts quality:build",
     "quality:typecheck:scripts": "corepack yarn tsx scripts/dev/root-command.ts quality:typecheck:scripts",
+    "quality:test:scripts": "node --import tsx --test scripts/maintenance/*.test.ts",
     "quality:test:smoke": "corepack yarn tsx scripts/dev/root-command.ts quality:test:smoke",
     "quality:test:fixtures": "corepack yarn tsx scripts/dev/root-command.ts quality:test:fixtures"
   },
