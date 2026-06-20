@@ -30,9 +30,9 @@
 - `yarn system:logs`
 
 プロファイルの意味:
-- `mock`: `dry-run` で localhost のみ公開
-- `local`: `execute` で localhost のみ公開
-- `lab`: `execute` で proxy/DNS を `0.0.0.0` 公開
+- `mock`: `dry-run` で proxy/DNS を localhost bind
+- `local`: `execute` で proxy/DNS を localhost bind
+- `lab`: `execute` で proxy/DNS を `0.0.0.0` bind
 
 非推奨コマンド:
 - `yarn environment:dev:*`

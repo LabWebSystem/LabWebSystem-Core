@@ -77,15 +77,15 @@ function buildCaddyfileVariant(routes: RouteRow[], mode: "default" | "http-only"
     const apiHost = `api.${env.rootDomain}`;
     lines.push(`http://${dashboardHost} {`);
     lines.push("  handle /api* {");
-    lines.push(`    reverse_proxy host.docker.internal:${env.port}`);
+    lines.push(`    reverse_proxy backend:${env.port}`);
     lines.push("  }");
     lines.push("  handle {");
-    lines.push("    reverse_proxy host.docker.internal:5173");
+    lines.push("    reverse_proxy dashboard:4173");
     lines.push("  }");
     lines.push("}");
     lines.push("");
     lines.push(`http://${apiHost} {`);
-    lines.push(`  reverse_proxy host.docker.internal:${env.port}`);
+    lines.push(`  reverse_proxy backend:${env.port}`);
     lines.push("}");
     lines.push("");
   }

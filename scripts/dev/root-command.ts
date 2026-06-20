@@ -16,6 +16,7 @@ const thisFile = fileURLToPath(import.meta.url);
 const projectRoot = path.resolve(path.dirname(thisFile), "..", "..");
 const backendEnvPath = path.join(projectRoot, "core", "backend", ".env");
 const dockerSocketPath = "/var/run/docker.sock";
+const kernelNetworkName = "labcore-kernel";
 
 function currentUid(): string {
   return typeof process.getuid === "function" ? String(process.getuid()) : "1000";
@@ -111,6 +112,24 @@ function runTsScript(relativePath: string, args: string[] = [], options: RunOpti
   run("corepack", ["yarn", "tsx", relativePath, ...args], options);
 }
 
+function ensureKernelNetwork(): void {
+  const result = spawnSync("docker", ["network", "inspect", kernelNetworkName], {
+    cwd: projectRoot,
+    stdio: "ignore",
+    env: process.env
+  });
+
+  if (result.status === 0) {
+    return;
+  }
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  run("docker", ["network", "create", kernelNetworkName]);
+}
+
 function runCompose(composeKey: ComposeKey, args: string[], options: RunOptions = {}): void {
   run("docker", ["compose", "-f", composeFiles[composeKey], ...args], options);
 }
@@ -133,6 +152,7 @@ function coreUp(options: RunOptions = {}): void {
   ensureManagedPermissions(options);
   ensureGeneratedFiles(options);
   coreDeps(options);
+  ensureKernelNetwork();
   runCompose("core", ["up", "-d", "--force-recreate", "backend", "dashboard"], {
     env: { ...coreComposeEnv, ...(options.env ?? {}) }
   });
@@ -146,6 +166,7 @@ function coreDown(options: RunOptions = {}): void {
 
 function proxyUp(options: RunOptions = {}): void {
   ensureGeneratedFiles(options);
+  ensureKernelNetwork();
   runCompose("proxy", ["up", "-d", "proxy"], options);
   runTsScript("scripts/dev/refresh-proxy-networks.ts", [], options);
 }

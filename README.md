@@ -57,9 +57,9 @@
 ## 注意事項
 - `.env` 再作成時はバックアップが自動作成されます。
 - `config:set` のプロファイルは次の 3 つです。
-  - `mock`: `dry-run` で localhost のみ公開
-  - `local`: `execute` で localhost のみ公開
-  - `lab`: `execute` で proxy/DNS を `0.0.0.0` 公開
+  - `mock`: `dry-run` で proxy/DNS を localhost bind
+  - `local`: `execute` で proxy/DNS を localhost bind
+  - `lab`: `execute` で proxy/DNS を `0.0.0.0` bind
 
 ## ドキュメント
 - docs 入口: `docs/README.md`

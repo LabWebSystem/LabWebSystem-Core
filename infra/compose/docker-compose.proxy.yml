@@ -11,3 +11,11 @@ services:
     volumes:
       - ../proxy/Caddyfile.dev:/etc/caddy/Caddyfile:ro
       - ../../core/backend/data/generated:/data/generated:ro
+    networks:
+      - default
+      - kernel
+
+networks:
+  kernel:
+    name: labcore-kernel
+    external: true

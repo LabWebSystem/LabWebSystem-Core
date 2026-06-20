@@ -34,8 +34,9 @@ services:
       - "${LAB_CORE_DOCKER_SOCKET_GID:-0}"
     environment:
       <<: *labcore-host-user-env
-    ports:
-      - "7300:7300"
+    networks:
+      - default
+      - kernel
 
   dashboard:
     <<: *labcore-node-tools
@@ -51,8 +52,14 @@ services:
       VITE_DEV_PROXY_TARGET: "http://backend:7300"
     depends_on:
       - backend
-    ports:
-      - "5173:4173"
+    networks:
+      - default
+      - kernel
 
 volumes:
   labcore_node_modules:
+
+networks:
+  kernel:
+    name: labcore-kernel
+    external: true

@@ -64,7 +64,7 @@
 1. `yarn install`
 2. `yarn config:set`
 3. backend 単体: `yarn service:backend:up`
-4. 全体起動（推奨）: `yarn system:up`
+4. 全体起動（推奨、dashboard / api は reverse proxy のドメイン経由）: `yarn system:up`
 
 ## 保守
 - 破壊的クリーンアップ: `yarn destroy`

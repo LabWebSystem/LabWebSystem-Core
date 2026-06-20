@@ -8,8 +8,8 @@ info:
     一部のレスポンスは compose 解析結果やダッシュボードレイアウトのように動的構造を含むため、
     `additionalProperties` や `object` を使って現行実装の柔軟性を維持しています。
 servers:
-  - url: http://localhost:7300
-    description: ローカル開発環境
+  - url: /
+    description: リバースプロキシ経由の現在オリジン
 tags:
   - name: Meta
   - name: System
