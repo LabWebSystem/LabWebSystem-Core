@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import type Database from "better-sqlite3";
 import { simpleGit } from "simple-git";
 import { env } from "../../lib/env.js";
@@ -41,6 +42,59 @@ type OperationRunnerOptions = {
   executionMode?: "dry-run" | "execute";
 };
 
+type DeleteHelperCommand = {
+  executable: string;
+  args: string[];
+};
+
+function resolveSudoExecutableFromPath(): string | null {
+  const pathValue = process.env.PATH ?? "";
+  const directories = pathValue
+    .split(path.delimiter)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+
+  for (const directory of directories) {
+    const candidate = path.join(directory, "sudo");
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  for (const candidate of ["/usr/bin/sudo", "/bin/sudo", "/usr/local/bin/sudo"]) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+export function resolveAppRootDeleteHelperCommand(applicationId: string): DeleteHelperCommand {
+  const directCommand = {
+    executable: process.execPath,
+    args: [env.appRootDeleteHelperPath, applicationId]
+  };
+
+  if (!env.appRootDeleteUsesSudo) {
+    return directCommand;
+  }
+
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    return directCommand;
+  }
+
+  const sudoExecutable = resolveSudoExecutableFromPath();
+  if (!sudoExecutable) {
+    return directCommand;
+  }
+
+  return {
+    executable: sudoExecutable,
+    args: ["--non-interactive", process.execPath, env.appRootDeleteHelperPath, applicationId]
+  };
+}
+
 export class OperationRunner {
   private readonly repository: OperationRepository;
   private readonly logs: OperationLogRepository;
@@ -62,9 +116,7 @@ export class OperationRunner {
   }
 
   private async runAppRootDeleteHelper(applicationId: string): Promise<void> {
-    const command = env.appRootDeleteUsesSudo
-      ? { executable: "sudo", args: ["--non-interactive", process.execPath, env.appRootDeleteHelperPath, applicationId] }
-      : { executable: process.execPath, args: [env.appRootDeleteHelperPath, applicationId] };
+    const command = resolveAppRootDeleteHelperCommand(applicationId);
 
     await runCommand(command.executable, command.args, {
       executionModeOverride: this.executionMode
