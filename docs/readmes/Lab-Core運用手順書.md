@@ -8,7 +8,7 @@
 - current
 
 最終更新日:
-- 2026-06-17
+- 2026-06-20
 
 補足:
 - 正式仕様は `docs/archives/20260516_230913_公式仕様統合/official_specification.md` を参照してください。
@@ -19,17 +19,25 @@
 ## 2. 起動手順
 1. `yarn install`
 2. `yarn config:set`
-3. 開発環境: `yarn environment:dev:up`
-4. 研究室運用: `yarn environment:lab:up`
+3. `mock` / `local` / `lab` のいずれかのプロファイルを選ぶ
+4. 起動: `yarn system:up`
 5. ブラウザで `http://dashboard.<LAB_CORE_ROOT_DOMAIN>/` を開く
 
 停止:
-- 開発環境: `yarn environment:dev:down`
-- 研究室運用: `yarn environment:lab:down`
+- `yarn system:down`
 
 ログ:
-- 開発環境: `yarn environment:dev:logs`
-- 研究室運用: `yarn environment:lab:logs`
+- `yarn system:logs`
+
+プロファイルの意味:
+- `mock`: `dry-run` で localhost のみ公開
+- `local`: `execute` で localhost のみ公開
+- `lab`: `execute` で proxy/DNS を `0.0.0.0` 公開
+
+非推奨コマンド:
+- `yarn environment:dev:*`
+- `yarn environment:lab:*`
+- 移行期間中は使えますが、今後は `yarn system:*` を使用してください。
 
 自動復帰:
 - `backend` / `dashboard` / `proxy` / `dns` には `restart: unless-stopped` を設定しています。

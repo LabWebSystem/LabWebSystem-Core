@@ -42,6 +42,7 @@
 ## 実行モード
 - `LAB_CORE_EXECUTION_MODE=dry-run`（既定）
 - `LAB_CORE_EXECUTION_MODE=execute`
+- `LAB_CORE_PROFILE=mock|local|lab`
 
 ## 既定パス（未設定時）
 - `LAB_CORE_DB_PATH=./core/backend/data/database.sqlite`
@@ -54,7 +55,8 @@
 
 ## DNS サーバー
 - `LAB_CORE_DNS_SERVER_ENABLED=true` で起動
-- `LAB_CORE_DNS_BIND_HOST`, `LAB_CORE_DNS_PORT` で待受設定
+- `LAB_CORE_DNS_BIND` を canonical な待受設定として使用
+- `LAB_CORE_DNS_BIND_HOST`, `LAB_CORE_DNS_PORT` は移行互換として読込
 - upstream は `LAB_CORE_DNS_UPSTREAMS` または `/etc/resolv.conf`
 - 53番ポートは権限要件あり
 
@@ -62,7 +64,7 @@
 1. `yarn install`
 2. `yarn config:set`
 3. backend 単体: `yarn service:backend:up`
-4. 全体起動（推奨）: `yarn environment:dev:up`
+4. 全体起動（推奨）: `yarn system:up`
 
 ## 保守
 - 破壊的クリーンアップ: `yarn destroy`

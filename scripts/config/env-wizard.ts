@@ -6,81 +6,80 @@ import path from "node:path";
 import { confirm, input, select } from "@inquirer/prompts";
 import { fileURLToPath } from "node:url";
 
+type ProfileKey = "mock" | "local" | "lab";
+type ExistingEnvAction = "inherit" | "reset" | "cancel";
+
+type EnvValues = Record<string, string>;
+
+interface IpCandidate {
+  address: string;
+  iface: string;
+}
+
 const command = process.argv[2] ?? "init";
 const thisFile = fileURLToPath(import.meta.url);
 const rootDir = path.resolve(path.dirname(thisFile), "..", "..");
 const envPath = path.join(rootDir, "core", "backend", ".env");
 
-const presets = {
+const profileCatalog: Record<ProfileKey, { label: string; summary: string; exposure: string }> = {
+  mock: {
+    label: "モック",
+    summary: "実コマンドを実行せず UI/API/設定生成を確認する構成",
+    exposure: "localhost のみ"
+  },
   local: {
-    label: "ローカル開発",
-    summary: "1台の開発機で dry-run 中心に確認する構成",
-    values: {
-      LAB_CORE_PORT: "7300",
-      LAB_CORE_EXECUTION_MODE: "dry-run",
-      LAB_CORE_DB_PATH: "./core/backend/data/database.sqlite",
-      LAB_CORE_DOCKER_SOCKET: "/var/run/docker.sock",
-      LAB_CORE_APPS_ROOT: "./runtime/apps",
-      LAB_CORE_APPDATA_ROOT: "./runtime/appdata",
-      LAB_CORE_MAIN_SERVICE_IP: "127.0.0.1",
-      LAB_CORE_SSH_SERVICE_IP: "127.0.0.1",
-      LAB_CORE_ROOT_DOMAIN: "lab.localhost",
-      LAB_CORE_PROXY_CONFIG_PATH: "./core/backend/data/generated/Caddyfile",
-      LAB_CORE_DNS_HOSTS_PATH: "./core/backend/data/generated/fukaya-sus.hosts",
-      LAB_CORE_SYNC_DIR: "./core/backend/data/generated",
-      LAB_CORE_DNS_SERVER_ENABLED: "true",
-      LAB_CORE_DNS_BIND_HOST: "127.0.0.1",
-      LAB_CORE_DNS_PORT: "1053",
-      LAB_CORE_DNS_UPSTREAMS: ""
-    }
+    label: "ローカル実行",
+    summary: "実コマンドを実行しつつ localhost に閉じて検証する構成",
+    exposure: "localhost のみ"
   },
   lab: {
-    label: "研究室運用",
-    summary: "研究室サーバー向けの本番運用構成",
-    values: {
-      LAB_CORE_PORT: "7300",
-      LAB_CORE_EXECUTION_MODE: "execute",
-      LAB_CORE_DB_PATH: "./core/backend/data/database.sqlite",
-      LAB_CORE_DOCKER_SOCKET: "/var/run/docker.sock",
-      LAB_CORE_APPS_ROOT: "./runtime/apps",
-      LAB_CORE_APPDATA_ROOT: "./runtime/appdata",
-      LAB_CORE_MAIN_SERVICE_IP: "192.168.40.224",
-      LAB_CORE_SSH_SERVICE_IP: "192.168.40.225",
-      LAB_CORE_ROOT_DOMAIN: "fukaya-sus.lab",
-      LAB_CORE_PROXY_CONFIG_PATH: "./core/backend/data/generated/Caddyfile",
-      LAB_CORE_DNS_HOSTS_PATH: "./core/backend/data/generated/fukaya-sus.hosts",
-      LAB_CORE_SYNC_DIR: "./core/backend/data/generated",
-      LAB_CORE_DNS_SERVER_ENABLED: "true",
-      LAB_CORE_DNS_BIND_HOST: "0.0.0.0",
-      LAB_CORE_DNS_PORT: "53",
-      LAB_CORE_DNS_UPSTREAMS: ""
-    }
-  },
-  vm: {
-    label: "検証VM",
-    summary: "本番近似だがリポジトリ直下データで扱う検証構成",
-    values: {
-      LAB_CORE_PORT: "7300",
-      LAB_CORE_EXECUTION_MODE: "execute",
-      LAB_CORE_DB_PATH: "./core/backend/data/database.sqlite",
-      LAB_CORE_DOCKER_SOCKET: "/var/run/docker.sock",
-      LAB_CORE_APPS_ROOT: "./runtime/apps",
-      LAB_CORE_APPDATA_ROOT: "./runtime/appdata",
-      LAB_CORE_MAIN_SERVICE_IP: "192.168.40.224",
-      LAB_CORE_SSH_SERVICE_IP: "192.168.40.225",
-      LAB_CORE_ROOT_DOMAIN: "fukaya-sus.lab",
-      LAB_CORE_PROXY_CONFIG_PATH: "./core/backend/data/generated/Caddyfile",
-      LAB_CORE_DNS_HOSTS_PATH: "./core/backend/data/generated/fukaya-sus.hosts",
-      LAB_CORE_SYNC_DIR: "./core/backend/data/generated",
-      LAB_CORE_DNS_SERVER_ENABLED: "true",
-      LAB_CORE_DNS_BIND_HOST: "0.0.0.0",
-      LAB_CORE_DNS_PORT: "53",
-      LAB_CORE_DNS_UPSTREAMS: ""
-    }
+    label: "研究室公開",
+    summary: "研究室 LAN 向けに proxy/DNS を 0.0.0.0 公開する構成",
+    exposure: "0.0.0.0 公開"
   }
 };
 
-function isValidIpv4(value) {
+const commonDefaults: EnvValues = {
+  LAB_CORE_PORT: "7300",
+  LAB_CORE_DB_PATH: "./core/backend/data/database.sqlite",
+  LAB_CORE_DOCKER_SOCKET: "/var/run/docker.sock",
+  LAB_CORE_APPS_ROOT: "./runtime/apps",
+  LAB_CORE_APPDATA_ROOT: "./runtime/appdata",
+  LAB_CORE_PROXY_CONFIG_PATH: "./core/backend/data/generated/Caddyfile",
+  LAB_CORE_DNS_HOSTS_PATH: "./core/backend/data/generated/fukaya-sus.hosts",
+  LAB_CORE_SYNC_DIR: "./core/backend/data/generated",
+  LAB_CORE_DNS_SERVER_ENABLED: "true",
+  LAB_CORE_DNS_UPSTREAMS: ""
+};
+
+const profileFixedValues: Record<ProfileKey, EnvValues> = {
+  mock: {
+    LAB_CORE_PROFILE: "mock",
+    LAB_CORE_EXECUTION_MODE: "dry-run",
+    LAB_CORE_PROXY_HTTP_BIND: "127.0.0.1:80",
+    LAB_CORE_DNS_BIND: "127.0.0.1:53",
+    LAB_CORE_DNS_BIND_HOST: "127.0.0.1",
+    LAB_CORE_DNS_PORT: "53"
+  },
+  local: {
+    LAB_CORE_PROFILE: "local",
+    LAB_CORE_EXECUTION_MODE: "execute",
+    LAB_CORE_PROXY_HTTP_BIND: "127.0.0.1:80",
+    LAB_CORE_DNS_BIND: "127.0.0.1:53",
+    LAB_CORE_DNS_BIND_HOST: "127.0.0.1",
+    LAB_CORE_DNS_PORT: "53"
+  },
+  lab: {
+    LAB_CORE_PROFILE: "lab",
+    LAB_CORE_EXECUTION_MODE: "execute",
+    LAB_CORE_PROXY_HTTP_BIND: "0.0.0.0:80",
+    LAB_CORE_DNS_BIND: "0.0.0.0:53",
+    LAB_CORE_DNS_BIND_HOST: "0.0.0.0",
+    LAB_CORE_DNS_PORT: "53"
+  }
+};
+
+function isValidIpv4(value: string): boolean {
   if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) {
     return false;
   }
@@ -89,7 +88,7 @@ function isValidIpv4(value) {
   return octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255);
 }
 
-function isPrivateIpv4(value) {
+function isPrivateIpv4(value: string): boolean {
   if (!isValidIpv4(value)) {
     return false;
   }
@@ -98,15 +97,30 @@ function isPrivateIpv4(value) {
   return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
 }
 
-function normalizeFamily(family) {
+function normalizeFamily(family: string | number): string {
   return typeof family === "string" ? family : String(family);
 }
 
-function isValidRootDomain(value) {
+function isValidRootDomain(value: string): boolean {
   return /^[a-z0-9.-]+$/.test(value);
 }
 
-function ipCandidatePriority(candidate) {
+function parseHostPort(value: string): { host: string; port: string } | null {
+  const separatorIndex = value.lastIndexOf(":");
+  if (separatorIndex <= 0 || separatorIndex === value.length - 1) {
+    return null;
+  }
+
+  const host = value.slice(0, separatorIndex).trim();
+  const port = value.slice(separatorIndex + 1).trim();
+  if (host.length === 0 || port.length === 0) {
+    return null;
+  }
+
+  return { host, port };
+}
+
+function ipCandidatePriority(candidate: IpCandidate): number {
   let score = 0;
   if (isPrivateIpv4(candidate.address)) {
     score += 3;
@@ -122,9 +136,9 @@ function ipCandidatePriority(candidate) {
   return score;
 }
 
-function collectMachineIpv4Candidates() {
+function collectMachineIpv4Candidates(): IpCandidate[] {
   const interfaces = os.networkInterfaces();
-  const unique = new Map();
+  const unique = new Map<string, IpCandidate>();
 
   for (const [iface, records] of Object.entries(interfaces)) {
     for (const record of records ?? []) {
@@ -135,10 +149,7 @@ function collectMachineIpv4Candidates() {
       if (record.internal) {
         continue;
       }
-      if (!isValidIpv4(record.address)) {
-        continue;
-      }
-      if (record.address.startsWith("169.254.")) {
+      if (!isValidIpv4(record.address) || record.address.startsWith("169.254.")) {
         continue;
       }
       if (!unique.has(record.address)) {
@@ -156,81 +167,65 @@ function collectMachineIpv4Candidates() {
   });
 }
 
-function buildIpSelectionChoices(candidates, currentValue) {
-  const choices = candidates.map((candidate) => ({
-    name: `${candidate.address} (${candidate.iface})`,
-    value: candidate.address
-  }));
-
-  if (isValidIpv4(currentValue) && !candidates.some((candidate) => candidate.address === currentValue)) {
-    choices.push({
-      name: `${currentValue} (現在値)`,
-      value: currentValue
-    });
-  }
-
-  choices.push({
-    name: "変更しない（現在値を維持）",
-    value: "__keep__"
-  });
-
-  return choices;
-}
-
-function profileLabel(profileKey) {
-  return profileKey === "custom" ? "custom" : presets[profileKey].label;
-}
-
-function buildInitialValues(selectedProfile, existingValues) {
-  if (selectedProfile === "custom") {
+function buildProfileInputDefaults(profile: ProfileKey, candidates: IpCandidate[]): EnvValues {
+  if (profile === "lab") {
+    const mainIp = candidates[0]?.address ?? "127.0.0.1";
+    const sshIp = candidates[1]?.address ?? mainIp;
     return {
-      ...presets.local.values,
-      ...existingValues
+      LAB_CORE_MAIN_SERVICE_IP: mainIp,
+      LAB_CORE_SSH_SERVICE_IP: sshIp,
+      LAB_CORE_ROOT_DOMAIN: "fukaya-sus.lab"
     };
   }
 
   return {
-    ...presets[selectedProfile].values
+    LAB_CORE_MAIN_SERVICE_IP: "127.0.0.1",
+    LAB_CORE_SSH_SERVICE_IP: "127.0.0.1",
+    LAB_CORE_ROOT_DOMAIN: "lab.localhost"
   };
 }
 
-function dashboardUrl(values) {
+function profileLabel(profileKey: ProfileKey): string {
+  return profileCatalog[profileKey].label;
+}
+
+function buildInitialValues(
+  selectedProfile: ProfileKey,
+  existingValues: EnvValues,
+  inheritExisting: boolean,
+  candidates: IpCandidate[]
+): EnvValues {
+  return {
+    ...commonDefaults,
+    ...buildProfileInputDefaults(selectedProfile, candidates),
+    ...(inheritExisting ? existingValues : {}),
+    ...profileFixedValues[selectedProfile]
+  };
+}
+
+function dashboardUrl(values: EnvValues): string {
   return `http://dashboard.${values.LAB_CORE_ROOT_DOMAIN}/`;
 }
 
-function apiUrl(values) {
+function apiUrl(values: EnvValues): string {
   return `http://api.${values.LAB_CORE_ROOT_DOMAIN}/api`;
 }
 
-function pickStartCommand(selectedProfile, values) {
-  if (selectedProfile === "lab") {
-    return "yarn environment:lab:up";
-  }
-  if (selectedProfile === "local") {
-    return "yarn environment:dev:up";
-  }
-  if (values.LAB_CORE_MAIN_SERVICE_IP === "127.0.0.1" || values.LAB_CORE_ROOT_DOMAIN.endsWith(".localhost")) {
-    return "yarn environment:dev:up";
-  }
-  return "yarn environment:lab:up";
-}
-
-function nextSteps(selectedProfile, values) {
-  const startCommand = pickStartCommand(selectedProfile, values);
+function nextSteps(values: EnvValues): string[] {
   const steps = [
-    `1) ${startCommand}`,
+    "1) yarn system:up",
     `2) ${dashboardUrl(values)} を開く`,
     `3) ${apiUrl(values)} を確認する`
   ];
 
-  if (startCommand === "yarn environment:lab:up") {
+  if (values.LAB_CORE_PROFILE === "lab") {
     steps.push(`4) クライアント側の DNS を ${values.LAB_CORE_MAIN_SERVICE_IP} へ向ける`);
   }
 
   return steps;
 }
 
-function nowStamp() {
+function nowStamp(): string {
   const now = new Date();
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, "0");
@@ -241,24 +236,32 @@ function nowStamp() {
   return `${y}${m}${d}${hh}${mm}${ss}`;
 }
 
-function buildTemplate(profileName, values) {
-  return `# Lab-Core backend runtime configuration
+function buildTemplate(profileName: ProfileKey, values: EnvValues): string {
+  return `# Lab-Core runtime configuration
 # generated_by: yarn config:set
 # generated_at: ${new Date().toISOString()}
 # profile: ${profileName}
 
+LAB_CORE_PROFILE=${values.LAB_CORE_PROFILE}
 LAB_CORE_PORT=${values.LAB_CORE_PORT}
 LAB_CORE_EXECUTION_MODE=${values.LAB_CORE_EXECUTION_MODE}
+
+LAB_CORE_PROXY_HTTP_BIND=${values.LAB_CORE_PROXY_HTTP_BIND}
+LAB_CORE_DNS_BIND=${values.LAB_CORE_DNS_BIND}
+
 LAB_CORE_DB_PATH=${values.LAB_CORE_DB_PATH}
 LAB_CORE_DOCKER_SOCKET=${values.LAB_CORE_DOCKER_SOCKET}
 LAB_CORE_APPS_ROOT=${values.LAB_CORE_APPS_ROOT}
 LAB_CORE_APPDATA_ROOT=${values.LAB_CORE_APPDATA_ROOT}
+
 LAB_CORE_MAIN_SERVICE_IP=${values.LAB_CORE_MAIN_SERVICE_IP}
 LAB_CORE_SSH_SERVICE_IP=${values.LAB_CORE_SSH_SERVICE_IP}
 LAB_CORE_ROOT_DOMAIN=${values.LAB_CORE_ROOT_DOMAIN}
+
 LAB_CORE_PROXY_CONFIG_PATH=${values.LAB_CORE_PROXY_CONFIG_PATH}
 LAB_CORE_DNS_HOSTS_PATH=${values.LAB_CORE_DNS_HOSTS_PATH}
 LAB_CORE_SYNC_DIR=${values.LAB_CORE_SYNC_DIR}
+
 LAB_CORE_DNS_SERVER_ENABLED=${values.LAB_CORE_DNS_SERVER_ENABLED}
 LAB_CORE_DNS_BIND_HOST=${values.LAB_CORE_DNS_BIND_HOST}
 LAB_CORE_DNS_PORT=${values.LAB_CORE_DNS_PORT}
@@ -266,18 +269,41 @@ LAB_CORE_DNS_UPSTREAMS=${values.LAB_CORE_DNS_UPSTREAMS}
 `;
 }
 
-function printPreview(selectedProfile, values) {
-  console.log("\n設定プレビュー:");
-  console.log(`- プロファイル: ${profileLabel(selectedProfile)}`);
-  console.log(`- LAB_CORE_MAIN_SERVICE_IP=${values.LAB_CORE_MAIN_SERVICE_IP}`);
-  console.log(`- LAB_CORE_SSH_SERVICE_IP=${values.LAB_CORE_SSH_SERVICE_IP}`);
-  console.log(`- LAB_CORE_ROOT_DOMAIN=${values.LAB_CORE_ROOT_DOMAIN}`);
-  console.log("- その他の値は選択プロファイルの既定値を適用");
-  console.log(`  - 実行モード: ${values.LAB_CORE_EXECUTION_MODE}`);
-  console.log(`  - DNS bind/port: ${values.LAB_CORE_DNS_BIND_HOST}:${values.LAB_CORE_DNS_PORT}`);
+function printPreview(selectedProfile: ProfileKey, values: EnvValues): void {
+  const dnsBind = parseHostPort(values.LAB_CORE_DNS_BIND);
+
+  console.log("\n保存前プレビュー:");
+  console.log(`Profile:    ${values.LAB_CORE_PROFILE} (${profileLabel(selectedProfile)})`);
+  console.log(`Execution:  ${values.LAB_CORE_EXECUTION_MODE}`);
+  console.log(`Exposure:   proxy=${values.LAB_CORE_PROXY_HTTP_BIND}, dns=${values.LAB_CORE_DNS_BIND}`);
+  console.log("Network:");
+  console.log(`  - main: ${values.LAB_CORE_MAIN_SERVICE_IP}`);
+  console.log(`  - ssh:  ${values.LAB_CORE_SSH_SERVICE_IP}`);
+  console.log(`  - root: ${values.LAB_CORE_ROOT_DOMAIN}`);
+  console.log("Paths:");
+  console.log(`  - db:    ${values.LAB_CORE_DB_PATH}`);
+  console.log(`  - apps:  ${values.LAB_CORE_APPS_ROOT}`);
+  console.log(`  - data:  ${values.LAB_CORE_APPDATA_ROOT}`);
+  console.log(`  - sync:  ${values.LAB_CORE_SYNC_DIR}`);
+  console.log("DNS:");
+  console.log(`  - server enabled: ${values.LAB_CORE_DNS_SERVER_ENABLED}`);
+  console.log(`  - canonical bind: ${values.LAB_CORE_DNS_BIND}`);
+  console.log(`  - legacy host:    ${values.LAB_CORE_DNS_BIND_HOST}`);
+  console.log(`  - legacy port:    ${values.LAB_CORE_DNS_PORT}`);
+  if (dnsBind) {
+    console.log(`  - parsed:         host=${dnsBind.host}, port=${dnsBind.port}`);
+  }
+  console.log("Next command:");
+  console.log("  - yarn system:up");
+
+  if (selectedProfile === "lab") {
+    console.log("\nWARNING:");
+    console.log("  lab profile exposes proxy and DNS on 0.0.0.0.");
+    console.log("  Make sure firewall and LAN access are intended.");
+  }
 }
 
-async function exists(filePath) {
+async function exists(filePath: string): Promise<boolean> {
   try {
     await fs.access(filePath);
     return true;
@@ -286,9 +312,9 @@ async function exists(filePath) {
   }
 }
 
-async function readEnvFile(filePath) {
+async function readEnvFile(filePath: string): Promise<EnvValues> {
   const content = await fs.readFile(filePath, "utf8");
-  const entries = {};
+  const entries: EnvValues = {};
 
   for (const rawLine of content.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -304,7 +330,10 @@ async function readEnvFile(filePath) {
 
     const key = normalized.slice(0, separatorIndex).trim();
     let value = normalized.slice(separatorIndex + 1).trim();
-    if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) {
+    if (
+      value.length >= 2 &&
+      ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'")))
+    ) {
       value = value.slice(1, -1);
     }
     entries[key] = value;
@@ -313,123 +342,89 @@ async function readEnvFile(filePath) {
   return entries;
 }
 
-async function selectProfile(fileExists, existingValues) {
-  const customHint = fileExists && Object.keys(existingValues).length > 0
-    ? "既存 .env を初期値として利用"
-    : "local プロファイルを土台に .env を作成";
+async function selectExistingEnvAction(fileExists: boolean, existingValues: EnvValues): Promise<ExistingEnvAction> {
+  if (!fileExists || Object.keys(existingValues).length === 0) {
+    return "reset";
+  }
 
   return select({
-    message: "使用するプロファイルを選択してください",
+    message: "既存 .env が見つかりました。初期値として引き継ぎますか？",
     choices: [
       {
-        name: `local  - ${presets.local.label} | ${presets.local.summary}`,
-        value: "local"
+        name: "引き継いで編集する",
+        value: "inherit",
+        description: "既存のパスやドメインを初期値に使い、固定値だけ新プロファイルで上書きします。"
       },
       {
-        name: `lab    - ${presets.lab.label} | ${presets.lab.summary}`,
-        value: "lab"
+        name: "初期化して作り直す",
+        value: "reset",
+        description: "推奨デフォルトから設定を作り直します。"
       },
       {
-        name: `vm     - ${presets.vm.label} | ${presets.vm.summary}`,
-        value: "vm"
-      },
-      {
-        name: `custom - ${customHint}`,
-        value: "custom"
+        name: "中止する",
+        value: "cancel",
+        description: "既存 .env を変更せず終了します。"
       }
     ],
-    pageSize: 8
+    pageSize: 6
   });
 }
 
-async function confirmExistingFile(fileExists) {
-  if (!fileExists) {
-    return true;
-  }
-
-  if (process.env.LAB_CORE_ENV_WIZARD_SKIP_EXISTING_CONFIRM === "1") {
-    return true;
-  }
-
-  if (command === "init") {
-    return confirm({
-      message: ".env は既に存在します。バックアップを取って上書きしますか？",
-      default: false
-    });
-  }
-
-  return confirm({
-    message: "現在の .env を再作成します。バックアップを取って続行しますか？",
-    default: false
+async function selectProfile(): Promise<ProfileKey> {
+  return select({
+    message: "使用するプロファイルを選択してください",
+    choices: (Object.keys(profileCatalog) as ProfileKey[]).map((profile) => ({
+      name: `${profile} - ${profileCatalog[profile].label}`,
+      value: profile,
+      description: `${profileCatalog[profile].summary} / ${profileCatalog[profile].exposure}`
+    })),
+    pageSize: 6
   });
 }
 
-async function maybeApplyMachineIp(values) {
-  const candidates = collectMachineIpv4Candidates();
-  if (candidates.length === 0) {
-    console.log("\nこのマシンで利用可能な外向き IPv4 を検出できなかったため、IP は初期値のまま開始します。");
-    return;
-  }
+function printWizardIntro(selectedProfile: ProfileKey, candidates: IpCandidate[]): void {
+  console.log("\nこのウィザードでは次の 3 項目を Enter だけで決められます:");
+  console.log("1) Main service IP");
+  console.log("2) SSH service IP");
+  console.log("3) Root domain");
+  console.log("その他の値は選択プロファイルの既定値を使います。");
 
-  const targets = [
-    {
-      key: "LAB_CORE_MAIN_SERVICE_IP",
-      label: "公開先IP"
-    },
-    {
-      key: "LAB_CORE_SSH_SERVICE_IP",
-      label: "SSH用IP"
-    }
-  ];
-
-  for (const target of targets) {
-    const selected = await select({
-      message: `${target.label} に設定する IP を選択してください`,
-      choices: buildIpSelectionChoices(candidates, values[target.key]),
-      pageSize: 10
-    });
-
-    if (selected === "__keep__") {
-      console.log(`${target.label} は現在値のまま維持します。`);
-      continue;
-    }
-
-    const confirmed = await confirm({
-      message: `${target.label} を ${selected} に設定しますか？`,
-      default: true
-    });
-
-    if (!confirmed) {
-      console.log(`${target.label} の自動適用はスキップしました。`);
-      continue;
-    }
-
-    values[target.key] = selected;
-    console.log(`${target.label} を適用しました: ${target.key}=${selected}`);
+  if (selectedProfile === "lab" && candidates.length > 0) {
+    const detected = candidates
+      .slice(0, 3)
+      .map((candidate) => `${candidate.address} (${candidate.iface})`)
+      .join(", ");
+    console.log(`\n検出した LAN IPv4 候補: ${detected}`);
   }
 }
 
-async function configureRootDomain(values) {
-  const selected = await input({
-    message: "ルートドメインを入力してください",
+async function promptIpv4Field(message: string, defaultValue: string): Promise<string> {
+  return input({
+    message,
+    default: defaultValue,
+    validate: (value) => isValidIpv4(value) || "IPv4 アドレスを入力してください。"
+  });
+}
+
+async function promptUserValues(values: EnvValues): Promise<void> {
+  values.LAB_CORE_MAIN_SERVICE_IP = await promptIpv4Field(
+    "Main service IP を入力してください",
+    values.LAB_CORE_MAIN_SERVICE_IP
+  );
+
+  values.LAB_CORE_SSH_SERVICE_IP = await promptIpv4Field(
+    "SSH service IP を入力してください",
+    values.LAB_CORE_SSH_SERVICE_IP
+  );
+
+  values.LAB_CORE_ROOT_DOMAIN = await input({
+    message: "Root domain を入力してください",
     default: values.LAB_CORE_ROOT_DOMAIN,
     validate: (value) => isValidRootDomain(value) || "英小文字・数字・ドット・ハイフンのみで入力してください。"
   });
-
-  const confirmed = await confirm({
-    message: `ルートドメインを ${selected} に設定しますか？`,
-    default: true
-  });
-
-  if (confirmed) {
-    values.LAB_CORE_ROOT_DOMAIN = selected;
-    return;
-  }
-
-  console.log("ルートドメインは現在値のまま維持します。");
 }
 
-async function saveValues(fileExists, selectedProfile, values) {
+async function saveValues(fileExists: boolean, selectedProfile: ProfileKey, values: EnvValues): Promise<void> {
   await fs.mkdir(path.dirname(envPath), { recursive: true });
   if (fileExists) {
     const backupPath = `${envPath}.backup.${nowStamp()}`;
@@ -437,41 +432,35 @@ async function saveValues(fileExists, selectedProfile, values) {
     console.log(`既存 .env をバックアップしました: ${backupPath}`);
   }
 
-  await fs.writeFile(envPath, buildTemplate(profileLabel(selectedProfile), values), "utf8");
+  await fs.writeFile(envPath, buildTemplate(selectedProfile, values), "utf8");
   console.log(`\n保存完了: ${envPath}`);
   console.log("次の手順:");
-  for (const step of nextSteps(selectedProfile, values)) {
+  for (const step of nextSteps(values)) {
     console.log(step);
   }
   console.log("\n補足: 追加の詳細設定は core/backend/.env を直接編集して調整できます。");
 }
 
-async function run() {
+async function run(): Promise<void> {
   console.log(`\n=== Lab-Core 設定ウィザード (${command}) ===`);
   console.log(`対象ファイル: ${envPath}`);
 
   const fileExists = await exists(envPath);
   const existingValues = fileExists ? await readEnvFile(envPath) : {};
-
-  const proceed = await confirmExistingFile(fileExists);
-  if (!proceed) {
+  const existingAction = await selectExistingEnvAction(fileExists, existingValues);
+  if (existingAction === "cancel") {
     console.log("中止しました。既存 .env は変更していません。");
     return;
   }
 
-  const selectedProfile = await selectProfile(fileExists, existingValues);
-  const values = buildInitialValues(selectedProfile, existingValues);
+  const selectedProfile = await selectProfile();
+  const candidates = collectMachineIpv4Candidates();
+  const values = buildInitialValues(selectedProfile, existingValues, existingAction === "inherit", candidates);
 
-  console.log("\nこのウィザードでは最小構成として次の 3 項目だけ設定します:");
-  console.log("1) 公開先IP");
-  console.log("2) SSH用IP");
-  console.log("3) ルートドメイン");
-  console.log("その他の設定は選択プロファイルの既定値を使います。\n");
-
-  await maybeApplyMachineIp(values);
-  await configureRootDomain(values);
-
+  printWizardIntro(selectedProfile, candidates);
+  await promptUserValues(values);
   printPreview(selectedProfile, values);
+
   const confirmed = await confirm({
     message: "この内容で保存しますか？",
     default: true

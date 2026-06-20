@@ -97,6 +97,13 @@ function toExecutionMode(value: string | undefined): "dry-run" | "execute" {
   return "dry-run";
 }
 
+function toProfile(value: string | undefined): "mock" | "local" | "lab" {
+  if (value === "local" || value === "lab") {
+    return value;
+  }
+  return "mock";
+}
+
 function toBoolean(value: string | undefined, defaultValue: boolean): boolean {
   if (value === undefined) {
     return defaultValue;
@@ -110,6 +117,25 @@ function toPort(value: string | undefined, defaultValue: number): number {
     return parsed;
   }
   return defaultValue;
+}
+
+function parseHostPort(value: string | undefined): { host: string; port: number } | null {
+  if (!value) {
+    return null;
+  }
+
+  const separatorIndex = value.lastIndexOf(":");
+  if (separatorIndex <= 0 || separatorIndex === value.length - 1) {
+    return null;
+  }
+
+  const host = value.slice(0, separatorIndex).trim();
+  const port = Number(value.slice(separatorIndex + 1).trim());
+  if (host.length === 0 || !Number.isInteger(port) || port < 1 || port > 65535) {
+    return null;
+  }
+
+  return { host, port };
 }
 
 function defaultDnsPort(): number {
@@ -129,12 +155,14 @@ function toCsvList(value: string | undefined): string[] {
 }
 
 export const env = {
+  profile: toProfile(process.env.LAB_CORE_PROFILE),
   port: Number(process.env.LAB_CORE_PORT ?? 7300),
   dbPath: toAbsolutePath(baseDir, process.env.LAB_CORE_DB_PATH ?? "./core/backend/data/database.sqlite"),
   dockerSocket: process.env.LAB_CORE_DOCKER_SOCKET ?? "/var/run/docker.sock",
   appsRoot: toAbsolutePath(baseDir, process.env.LAB_CORE_APPS_ROOT ?? "./runtime/apps"),
   appDataRoot: toAbsolutePath(baseDir, process.env.LAB_CORE_APPDATA_ROOT ?? "./runtime/appdata"),
   executionMode: toExecutionMode(process.env.LAB_CORE_EXECUTION_MODE),
+  proxyHttpBind: process.env.LAB_CORE_PROXY_HTTP_BIND ?? "127.0.0.1:80",
   mainServiceIp: process.env.LAB_CORE_MAIN_SERVICE_IP ?? "192.168.40.224",
   sshServiceIp: process.env.LAB_CORE_SSH_SERVICE_IP ?? "192.168.40.225",
   rootDomain: process.env.LAB_CORE_ROOT_DOMAIN ?? "fukaya-sus.lab",
@@ -148,7 +176,7 @@ export const env = {
   ),
   generatedSyncDir: toAbsolutePath(baseDir, process.env.LAB_CORE_SYNC_DIR ?? "./core/backend/data/generated"),
   dnsServerEnabled: toBoolean(process.env.LAB_CORE_DNS_SERVER_ENABLED, true),
-  dnsBindHost: process.env.LAB_CORE_DNS_BIND_HOST ?? "127.0.0.1",
-  dnsPort: toPort(process.env.LAB_CORE_DNS_PORT, defaultDnsPort()),
+  dnsBindHost: parseHostPort(process.env.LAB_CORE_DNS_BIND)?.host ?? process.env.LAB_CORE_DNS_BIND_HOST ?? "127.0.0.1",
+  dnsPort: parseHostPort(process.env.LAB_CORE_DNS_BIND)?.port ?? toPort(process.env.LAB_CORE_DNS_PORT, defaultDnsPort()),
   dnsUpstreams: toCsvList(process.env.LAB_CORE_DNS_UPSTREAMS)
 };

@@ -76,7 +76,7 @@ try {
   } catch (repairError) {
     const message = repairError instanceof Error ? repairError.message : String(repairError);
     console.error("failed to repair managed file permissions automatically");
-    console.error("run `yarn permissions:repair` once, then retry `yarn lab:up`");
+    console.error("run `yarn permissions:repair` once, then retry `yarn system:up`");
     throw new Error(message);
   }
 }

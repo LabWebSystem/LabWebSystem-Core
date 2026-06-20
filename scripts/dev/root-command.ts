@@ -4,7 +4,6 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { confirm } from "@inquirer/prompts";
 
 type ComposeKey = "core" | "proxy" | "dns";
 type CommandHandler = () => void | Promise<void>;
@@ -34,6 +33,52 @@ function dockerSocketGroupId(): string {
   }
 }
 
+function parseEnvFile(content: string): NodeJS.ProcessEnv {
+  const entries: NodeJS.ProcessEnv = {};
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line.length === 0 || line.startsWith("#")) {
+      continue;
+    }
+
+    const normalized = line.startsWith("export ") ? line.slice("export ".length).trim() : line;
+    const separatorIndex = normalized.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = normalized.slice(0, separatorIndex).trim();
+    let value = normalized.slice(separatorIndex + 1).trim();
+    if (
+      value.length >= 2 &&
+      ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'")))
+    ) {
+      value = value.slice(1, -1);
+    }
+
+    entries[key] = value;
+  }
+
+  return entries;
+}
+
+function readBackendEnv(): NodeJS.ProcessEnv {
+  if (!fs.existsSync(backendEnvPath)) {
+    return {};
+  }
+
+  return parseEnvFile(fs.readFileSync(backendEnvPath, "utf8"));
+}
+
+function systemEnv(extraEnv: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  return {
+    ...readBackendEnv(),
+    ...process.env,
+    ...extraEnv
+  };
+}
+
 const composeFiles: Record<ComposeKey, string> = {
   core: "infra/compose/docker-compose.dev.yml",
   proxy: "infra/compose/docker-compose.proxy.yml",
@@ -45,11 +90,6 @@ const coreComposeEnv: NodeJS.ProcessEnv = {
   LAB_CORE_HOST_UID: currentUid(),
   LAB_CORE_HOST_GID: currentGid(),
   LAB_CORE_DOCKER_SOCKET_GID: dockerSocketGroupId()
-};
-
-const labEnv: NodeJS.ProcessEnv = {
-  LAB_CORE_PROXY_HTTP_BIND: "0.0.0.0:80",
-  LAB_CORE_DNS_BIND: "0.0.0.0:53"
 };
 
 function run(command: string, args: string[], options: RunOptions = {}): void {
@@ -135,26 +175,6 @@ function kernelDown(options: RunOptions = {}): void {
   coreDown(options);
 }
 
-function runWithEnv(env: NodeJS.ProcessEnv, fn: () => void): void {
-  const previousValues: Record<string, string | undefined> = {};
-  const keys = Object.keys(env);
-  for (const key of keys) {
-    previousValues[key] = process.env[key];
-    process.env[key] = env[key];
-  }
-  try {
-    fn();
-  } finally {
-    for (const key of keys) {
-      if (typeof previousValues[key] === "undefined") {
-        delete process.env[key];
-      } else {
-        process.env[key] = previousValues[key];
-      }
-    }
-  }
-}
-
 async function runConfigCommand(): Promise<void> {
   if (!fs.existsSync(backendEnvPath)) {
     runTsScript("scripts/config/env-wizard.ts", ["init"]);
@@ -167,19 +187,7 @@ async function runConfigCommand(): Promise<void> {
     process.exit(1);
   }
 
-  const proceed = await confirm({
-    message: "core/backend/.env が存在します。設定を再作成（reset）しますか？",
-    default: false
-  });
-
-  if (!proceed) {
-    console.log("[config] 中止しました。既存 .env は変更していません。");
-    return;
-  }
-
-  runTsScript("scripts/config/env-wizard.ts", ["reset"], {
-    env: { LAB_CORE_ENV_WIZARD_SKIP_EXISTING_CONFIRM: "1" }
-  });
+  runTsScript("scripts/config/env-wizard.ts", ["reset"]);
 }
 
 function ensureConfigFileExists(commandName: string): void {
@@ -260,13 +268,39 @@ function runConfigEditCommand(): void {
   );
 }
 
+function systemUp(): void {
+  ensureConfigFileExists("system:up");
+  const env = systemEnv();
+  kernelUp({ env });
+}
+
+function systemDown(): void {
+  const env = systemEnv();
+  kernelDown({ env });
+}
+
+function systemLogs(): void {
+  const env = systemEnv();
+  runTsScript("scripts/dev/stream-kernel-logs.ts", [], { env });
+}
+
+function deprecatedEnvironmentCommand(oldName: string, newName: string, handler: CommandHandler): CommandHandler {
+  return async () => {
+    console.warn(`[deprecated] yarn ${oldName} は非推奨です。代わりに yarn ${newName} を使用してください。`);
+    await handler();
+  };
+}
+
 const commands: Record<string, CommandHandler> = {
-  "environment:dev:up": () => kernelUp(),
-  "environment:dev:down": () => kernelDown(),
-  "environment:dev:logs": () => runTsScript("scripts/dev/stream-kernel-logs.ts"),
-  "environment:lab:up": () => runWithEnv(labEnv, () => kernelUp({ env: labEnv })),
-  "environment:lab:down": () => runWithEnv(labEnv, () => kernelDown({ env: labEnv })),
-  "environment:lab:logs": () => runTsScript("scripts/dev/stream-kernel-logs.ts"),
+  "system:up": () => systemUp(),
+  "system:down": () => systemDown(),
+  "system:logs": () => systemLogs(),
+  "environment:dev:up": deprecatedEnvironmentCommand("environment:dev:up", "system:up", () => systemUp()),
+  "environment:dev:down": deprecatedEnvironmentCommand("environment:dev:down", "system:down", () => systemDown()),
+  "environment:dev:logs": deprecatedEnvironmentCommand("environment:dev:logs", "system:logs", () => systemLogs()),
+  "environment:lab:up": deprecatedEnvironmentCommand("environment:lab:up", "system:up", () => systemUp()),
+  "environment:lab:down": deprecatedEnvironmentCommand("environment:lab:down", "system:down", () => systemDown()),
+  "environment:lab:logs": deprecatedEnvironmentCommand("environment:lab:logs", "system:logs", () => systemLogs()),
   "config:set": () => runConfigCommand(),
   "config:show": () => runConfigShowCommand(),
   "config:edit": () => runConfigEditCommand(),

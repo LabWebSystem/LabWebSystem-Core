@@ -22,8 +22,8 @@
 ## クイックスタート
 1. `yarn install`
 2. `yarn config:set`
-3. 開発: `yarn environment:dev:up`
-4. 研究室運用: `yarn environment:lab:up`
+3. 起動: `yarn system:up`
+4. 必要に応じて `mock` / `local` / `lab` プロファイルを `yarn config:set` で選択
 5. `http://dashboard.<LAB_CORE_ROOT_DOMAIN>/` を開く
 
 ## 公開コマンド（現行）
@@ -32,11 +32,14 @@
   - `yarn config:set`
   - `yarn config:show`
   - `yarn config:edit`
-- 一括起動/停止/ログ（開発）:
+- 一括起動/停止/ログ（正規コマンド）:
+  - `yarn system:up`
+  - `yarn system:down`
+  - `yarn system:logs`
+- 旧コマンド（非推奨エイリアス）:
   - `yarn environment:dev:up`
   - `yarn environment:dev:down`
   - `yarn environment:dev:logs`
-- 一括起動/停止/ログ（研究室運用）:
   - `yarn environment:lab:up`
   - `yarn environment:lab:down`
   - `yarn environment:lab:logs`
@@ -53,6 +56,10 @@
 
 ## 注意事項
 - `.env` 再作成時はバックアップが自動作成されます。
+- `config:set` のプロファイルは次の 3 つです。
+  - `mock`: `dry-run` で localhost のみ公開
+  - `local`: `execute` で localhost のみ公開
+  - `lab`: `execute` で proxy/DNS を `0.0.0.0` 公開
 
 ## ドキュメント
 - docs 入口: `docs/README.md`
