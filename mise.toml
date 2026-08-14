@@ -1,3 +1,39 @@
 [tools]
 node = "22"
 yarn = "latest"
+
+[tasks.dev]
+description = "dashboard と backend を開発モードで起動する"
+run = "node --import tsx scripts/tasks/development.ts dev"
+
+[tasks.dashboard]
+description = "dashboard だけを Vite の HMR 付きで起動する"
+run = "node --import tsx scripts/tasks/development.ts dashboard"
+
+[tasks.backend]
+description = "backend だけを watch モードで起動する"
+run = "node --import tsx scripts/tasks/development.ts backend"
+
+[tasks.test]
+description = "Docker に依存しない通常テストを実行する"
+run = "node --import tsx scripts/tasks/test.ts"
+
+[tasks."test:container"]
+description = "Docker image と runtime の検証を実行する"
+run = "node --import tsx scripts/tasks/container-test.ts"
+
+[tasks."test:system"]
+description = "DNS / reverse proxy を含む独立システム検証を実行する"
+run = "node --import tsx scripts/tasks/system-test.ts"
+
+[tasks.deploy]
+description = "CI を通過したタグを GitHub Actions の Release 入口へ渡す"
+run = "node --import tsx scripts/tasks/deploy.ts"
+
+[tasks.stop]
+description = "開発プロセスと検証用 Compose を停止する"
+run = "node --import tsx scripts/tasks/stop.ts"
+
+[tasks.clean]
+description = "開発・検証で生成した一時成果物を削除する"
+run = "node --import tsx scripts/tasks/clean.ts"

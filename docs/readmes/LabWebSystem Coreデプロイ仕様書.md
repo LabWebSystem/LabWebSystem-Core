@@ -19,7 +19,7 @@ LabWebSystem Coreは、`lwsctl`がなくてもGitHub ReleaseとDocker Composeだ
 ```json
 {
   "manifestVersion": 1,
-  "version": "1.2.3",
+  "version": "0.1.0",
   "minimumLwsctlVersion": "0.1.0",
   "artifacts": {
     "compose": { "name": "compose.yaml", "sha256": "..." }
@@ -54,7 +54,7 @@ container、image、network、Composeファイルは再生成可能であり、D
 設定は`runtime.env`へ集約する。
 
 ```dotenv
-LWS_VERSION=1.2.3
+LWS_VERSION=0.1.0
 LWS_PRIMARY_DOMAIN=example.com
 LWS_INSTALLATION_ID=<stable-installation-id>
 LWS_DATA_DIR=/var/lib/labwebsystem

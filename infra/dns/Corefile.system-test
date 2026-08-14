@@ -1,0 +1,7 @@
+.:53 {
+  hosts {
+    127.0.0.1 dashboard.lab.localhost
+    fallthrough
+  }
+  forward . 1.1.1.1
+}

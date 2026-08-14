@@ -1,0 +1,51 @@
+name: labcore-system-test
+
+services:
+  backend:
+    image: labcore-system-test-backend:0.1.0
+    environment:
+      LAB_CORE_VERSION: "0.1.0"
+      LAB_CORE_EXECUTION_MODE: dry-run
+      LAB_CORE_DNS_SERVER_ENABLED: "false"
+      LAB_CORE_DATA_DIRECTORY: /var/lib/labcore
+      LAB_CORE_DB_PATH: /var/lib/labcore/database.sqlite
+      LAB_CORE_APPS_ROOT: /var/lib/labcore/apps
+      LAB_CORE_APPDATA_ROOT: /var/lib/labcore/appdata
+      LAB_CORE_SYNC_DIR: /var/lib/labcore/generated
+      LAB_CORE_ROOT_DOMAIN: lab.localhost
+    volumes:
+      - system_test_data:/var/lib/labcore
+    healthcheck:
+      test: [CMD, curl, -fsS, http://localhost:7300/health]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  dashboard:
+    image: labcore-system-test-dashboard:0.1.0
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  proxy:
+    image: caddy:2-alpine
+    depends_on:
+      backend:
+        condition: service_healthy
+      dashboard:
+        condition: service_started
+    ports:
+      - "127.0.0.1:${LAB_CORE_SYSTEM_TEST_HTTP_PORT:-18080}:80"
+    volumes:
+      - ../proxy/Caddyfile.system-test:/etc/caddy/Caddyfile:ro
+    networks: [default]
+
+  dns:
+    image: coredns/coredns:1.11.1
+    command: [-conf, /etc/coredns/Corefile]
+    volumes:
+      - ../dns/Corefile.system-test:/etc/coredns/Corefile:ro
+    networks: [default]
+
+volumes:
+  system_test_data:

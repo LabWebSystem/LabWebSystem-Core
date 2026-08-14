@@ -1,4 +1,4 @@
-# LabCore-SDK v0.0.1
+# LabCore-SDK v0.1.0
 
 Lab-Core compatible application SDK implementation.
 

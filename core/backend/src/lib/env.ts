@@ -51,57 +51,11 @@ function findProjectRoot(startDir: string): string {
 
 const baseDir = findProjectRoot(process.cwd());
 
-function loadDotEnvIfExists(filePath: string): void {
-  if (!fs.existsSync(filePath)) {
-    return;
-  }
-
-  const content = fs.readFileSync(filePath, "utf8");
-  const lines = content.split(/\r?\n/);
-
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (line.length === 0 || line.startsWith("#")) {
-      continue;
-    }
-
-    const normalized = line.startsWith("export ") ? line.slice("export ".length).trim() : line;
-    const separatorIndex = normalized.indexOf("=");
-    if (separatorIndex <= 0) {
-      continue;
-    }
-
-    const key = normalized.slice(0, separatorIndex).trim();
-    let value = normalized.slice(separatorIndex + 1).trim();
-    if (value.length >= 2) {
-      if (
-        (value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))
-      ) {
-        value = value.slice(1, -1);
-      }
-    }
-
-    if (process.env[key] === undefined) {
-      process.env[key] = value;
-    }
-  }
-}
-
-loadDotEnvIfExists(path.resolve(baseDir, "core/backend/.env"));
-
 function toExecutionMode(value: string | undefined): "dry-run" | "execute" {
   if (value === "execute") {
     return "execute";
   }
   return "dry-run";
-}
-
-function toProfile(value: string | undefined): "mock" | "local" | "lab" {
-  if (value === "local" || value === "lab") {
-    return value;
-  }
-  return "mock";
 }
 
 function toBoolean(value: string | undefined, defaultValue: boolean): boolean {
@@ -155,7 +109,6 @@ function toCsvList(value: string | undefined): string[] {
 }
 
 export const env = {
-  profile: toProfile(process.env.LAB_CORE_PROFILE),
   port: Number(process.env.LAB_CORE_PORT ?? 7300),
   version: process.env.LAB_CORE_VERSION ?? "0.1.0",
   installationId: process.env.LAB_CORE_INSTALLATION_ID ?? "development",
@@ -165,7 +118,6 @@ export const env = {
   appsRoot: toAbsolutePath(baseDir, process.env.LAB_CORE_APPS_ROOT ?? "./runtime/apps"),
   appDataRoot: toAbsolutePath(baseDir, process.env.LAB_CORE_APPDATA_ROOT ?? "./runtime/appdata"),
   executionMode: toExecutionMode(process.env.LAB_CORE_EXECUTION_MODE),
-  proxyHttpBind: process.env.LAB_CORE_PROXY_HTTP_BIND ?? "127.0.0.1:80",
   mainServiceIp: process.env.LAB_CORE_MAIN_SERVICE_IP ?? "192.168.40.224",
   sshServiceIp: process.env.LAB_CORE_SSH_SERVICE_IP ?? "192.168.40.225",
   rootDomain: process.env.LAB_CORE_ROOT_DOMAIN ?? "fukaya-sus.lab",

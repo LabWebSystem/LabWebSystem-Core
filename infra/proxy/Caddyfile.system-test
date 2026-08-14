@@ -1,0 +1,16 @@
+{
+  auto_https off
+  admin off
+}
+
+:80 {
+  handle /health* {
+    reverse_proxy backend:7300
+  }
+  handle /api/* {
+    reverse_proxy backend:7300
+  }
+  handle {
+    reverse_proxy dashboard:80
+  }
+}

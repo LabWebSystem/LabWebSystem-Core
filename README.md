@@ -1,86 +1,51 @@
-# Lab-Core v3
+# LabWebSystem Core v0.1.0
 
-研究室向け統合 Web アプリ配信・運用基盤のリポジトリです。
+研究室向け統合 Web アプリ配信・運用基盤です。
 
 ## 構成
+
 - `core/backend`: Hono + TypeScript + SQLite の API サーバー
 - `core/dashboard`: React + Vite の運用ダッシュボード
-- `infra/compose`: backend / dashboard / proxy / DNS の compose 定義
-- `scripts`: 起動・設定・品質確認・保守用スクリプト
+- `infra/compose`: 開発・検証・Production のコンテナ定義
+- `sdk`: 適合アプリ向け SDK
 
-## Production導入
+## 開発
 
-ProductionはGitHub Releaseの`compose.yaml`と`runtime.env`だけで動作し、ホストへNode.js、Yarn、Git、build toolchainを導入する必要はありません。手順とRelease契約は`docs/readmes/LabWebSystem Coreデプロイ仕様書.md`を参照してください。
+開発者向けのリポジトリ全体の入口は `mise` です。設定プロファイルや事前の `config:set` は必要ありません。
 
-## 前提依存関係
-- Node.js: `22.x` 推奨
-  - `2026-05-16` 時点で `Node 24` は `better-sqlite3` ビルド失敗を確認
-- Yarn: `corepack yarn`（`packageManager: yarn@4.14.1`）
-- Docker Engine
-- Docker Compose v2（`docker compose`）
-- Git
+```bash
+mise install
+mise run dev
+```
 
-補足:
-- 環境によっては `yarn install` 時に `make` / `gcc-c++` / `python3` が必要です。
+目的別の入口は次のとおりです。
 
-## クイックスタート
-1. `yarn install`
-2. `yarn config:set`
-3. 起動: `yarn system:up`
-4. 必要に応じて `mock` / `local` / `lab` プロファイルを `yarn config:set` で選択
-5. `http://dashboard.<LAB_CORE_ROOT_DOMAIN>/` を開く
+| タスク | 用途 |
+| --- | --- |
+| `mise run dev` | dashboard + backend の通常開発 |
+| `mise run dashboard` | dashboard 単体の Vite/HMR 開発 |
+| `mise run backend` | backend 単体の watch 開発 |
+| `mise run test` | Docker に依存しない通常テスト |
+| `mise run test:container` | Docker image / runtime 検証 |
+| `mise run test:system` | DNS / reverse proxy を含む独立システム検証 |
+| `mise run deploy` | CI Release の統一入口 |
+| `mise run stop` | 開発・検証プロセスの停止 |
+| `mise run clean` | 開発生成物のクリーンアップ |
 
-## 公開コマンド（現行）
-- ランチャー: `yarn launcher`
-- 設定:
-  - `yarn config:set`
-  - `yarn config:show`
-  - `yarn config:edit`
-- 一括起動/停止/ログ（正規コマンド）:
-  - `yarn system:up`
-  - `yarn system:down`
-  - `yarn system:logs`
-- 旧コマンド（非推奨エイリアス）:
-  - `yarn environment:dev:up`
-  - `yarn environment:dev:down`
-  - `yarn environment:dev:logs`
-  - `yarn environment:lab:up`
-  - `yarn environment:lab:down`
-  - `yarn environment:lab:logs`
-- 個別起動:
-  - `yarn service:backend:up`
-  - `yarn service:dashboard:up`
-- 品質確認:
-  - `yarn quality:build`
-  - `yarn quality:typecheck:scripts`
-  - `yarn quality:test:scripts`
-  - `yarn quality:test:fixtures`
-  - `yarn quality:test:smoke`
-- 破壊的クリーンアップ（確認付き）:
-  - `yarn destroy` (`yarn destroy:soft` と同じ)
-  - `yarn destroy:soft`
-  - `yarn destroy:hard`
+開発時の DB、runtime、secret 相当値、内部 URL はタスクが自動的に決定します。通常の UI 開発や backend 開発で Docker、DNS、reverse proxy を起動しません。
 
-## 注意事項
-- `.env` 再作成時はバックアップが自動作成されます。
-- `config:set` のプロファイルは次の 3 つです。
-  - `mock`: `dry-run` で proxy/DNS を localhost bind
-  - `local`: `execute` で proxy/DNS を localhost bind
-  - `lab`: `execute` で proxy/DNS を `0.0.0.0` bind
+## Production
+
+Production は GitHub Release の `compose.yaml` と `runtime.env` で動作します。Release 契約と導入手順は [`LabWebSystem Coreデプロイ仕様書.md`](docs/readmes/LabWebSystem%20Coreデプロイ仕様書.md) を参照してください。
+
+## バージョン
+
+現在のリポジトリバージョンは [`VERSION`](VERSION) を正本とし、`v0.1.0` に統一しています。Release tag は `v0.1.0` 形式です。
 
 ## ドキュメント
-- docs 入口: `docs/README.md`
-- 正式仕様（現行実装準拠）:
-  - `docs/archives/20260516_230913_公式仕様統合/official_specification.md`
-- 操作説明（簡易）:
-  - `docs/readmes/Lab-Core運用手順書.md`
-- backend OpenAPI 仕様:
-  - `core/backend/openapi/openapi.yaml`
-- backend API Trace Map:
-  - `docs/readmes/バックエンドAPIトレースマップ.md`
-- 適合アプリ作成ガイド:
-  - `docs/readmes/適合アプリ作成ガイド.md`
-- SDK 概要:
-  - `docs/readmes/SDK概要.md`
-- SDK 仕様:
-  - `docs/readmes/SDK仕様書.md`
+
+- [`LabWebSystem Core 開発・検証・デプロイ体制仕様書.md`](docs/readmes/LabWebSystem%20Core%20開発・検証・デプロイ体制仕様書.md)
+- [`説明書一覧.md`](docs/readmes/説明書一覧.md)
+- [`LabWebSystem Coreデプロイ仕様書.md`](docs/readmes/LabWebSystem%20Coreデプロイ仕様書.md)
+- [`SDK概要.md`](docs/readmes/SDK概要.md)
+- [`SDK仕様書.md`](docs/readmes/SDK仕様書.md)

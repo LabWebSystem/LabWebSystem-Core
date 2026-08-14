@@ -1,6 +1,6 @@
 {
   "name": "@lab-core/sdk-cli",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "type": "module",
   "main": "dist/src/main.js",
   "types": "dist/src/main.d.ts",

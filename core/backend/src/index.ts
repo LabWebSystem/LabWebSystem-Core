@@ -142,7 +142,7 @@ if (currentEventCount === 0) {
   recordEvent({
     scope: "system",
     level: "info",
-    title: "Lab-Core v3 を初期化しました",
+    title: "LabWebSystem Core v0.1.0 を初期化しました",
     message: "バックエンドが初回起動しました。"
   });
 }
