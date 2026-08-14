@@ -8,6 +8,10 @@
 - `infra/compose`: backend / dashboard / proxy / DNS の compose 定義
 - `scripts`: 起動・設定・品質確認・保守用スクリプト
 
+## Production導入
+
+ProductionはGitHub Releaseの`compose.yaml`と`runtime.env`だけで動作し、ホストへNode.js、Yarn、Git、build toolchainを導入する必要はありません。手順とRelease契約は`docs/readmes/LabWebSystem Coreデプロイ仕様書.md`を参照してください。
+
 ## 前提依存関係
 - Node.js: `22.x` 推奨
   - `2026-05-16` 時点で `Node 24` は `better-sqlite3` ビルド失敗を確認

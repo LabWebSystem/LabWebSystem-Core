@@ -3,13 +3,7 @@ name: LabWebSystem Core Release
 on:
   push:
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: "既存のRelease対象タグ"
-        required: true
-        type: string
+      - "v*.*.*"
 
 permissions:
   contents: write
@@ -31,17 +25,8 @@ jobs:
         id: version
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            release_tag="${{ inputs.release_tag }}"
-          else
-            release_tag="$GITHUB_REF_NAME"
-          fi
-          case "$release_tag" in
-            v[0-9]*.[0-9]*.[0-9]*) ;;
-            *) echo "invalid release tag: $release_tag" >&2; exit 1 ;;
-          esac
-          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
-          echo "version=${release_tag#v}" >> "$GITHUB_OUTPUT"
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -78,40 +63,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${{ steps.version.outputs.version }}"
-          manifest_version="$(node -p "require('./release.json').labWebSystemVersion")"
-          test "$version" = "$manifest_version"
-          mkdir -p release-assets
-          cp release.json release-assets/release.json
-          cp infra/compose/compose.production.yml release-assets/compose.production.yml
-          cp infra/compose/Caddyfile.production release-assets/Caddyfile.production
-
-          expected_sha="$(node -p "require('./release.json').compose.sha256")"
-          actual_sha="$(sha256sum release-assets/compose.production.yml | awk '{print $1}')"
-          test "$expected_sha" = "$actual_sha"
-
-      - name: Make GHCR images public
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          for package in backend dashboard; do
-            gh api --method PATCH "orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/${package}" \
-              -f visibility=public >/dev/null
-          done
+          mkdir release-assets
+          cp infra/compose/compose.yaml release-assets/compose.yaml
+          sha256="$(sha256sum release-assets/compose.yaml | awk '{print $1}')"
+          jq -n \
+            --arg version "${{ steps.version.outputs.version }}" \
+            --arg sha256 "$sha256" \
+            '{manifestVersion: 1, version: $version, minimumLwsctlVersion: "0.1.0", artifacts: {compose: {name: "compose.yaml", sha256: $sha256}}}' \
+            > release-assets/release.json
 
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view "${{ steps.version.outputs.release_tag }}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "${{ steps.version.outputs.release_tag }}" \
-              release-assets/release.json release-assets/compose.production.yml release-assets/Caddyfile.production \
-              --repo "$GITHUB_REPOSITORY" --clobber
-          else
-            gh release create "${{ steps.version.outputs.release_tag }}" \
-              release-assets/release.json release-assets/compose.production.yml release-assets/Caddyfile.production \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "LabWebSystem Core ${{ steps.version.outputs.release_tag }}" \
-              --generate-notes
-          fi
+          gh release create "$GITHUB_REF_NAME" \
+            release-assets/release.json release-assets/compose.yaml \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "LabWebSystem Core $GITHUB_REF_NAME" \
+            --generate-notes
