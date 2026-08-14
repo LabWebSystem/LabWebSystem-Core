@@ -28,7 +28,7 @@ mise run dev
 | `mise run test` | Docker に依存しない通常テスト |
 | `mise run test:container` | Docker image / runtime 検証 |
 | `mise run test:system` | DNS / reverse proxy を含む独立システム検証 |
-| `mise run deploy` | CI Release の統一入口 |
+| `mise run deploy --version vX.Y.Z` | CI Release の統一入口 |
 | `mise run stop` | 開発・検証プロセスの停止 |
 | `mise run clean` | 開発生成物のクリーンアップ |
 

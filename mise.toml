@@ -28,6 +28,7 @@ run = "node --import tsx scripts/tasks/system-test.ts"
 
 [tasks.deploy]
 description = "CI を通過したタグを GitHub Actions の Release 入口へ渡す"
+usage = 'flag "--version <version>" help="Release version (vX.Y.Z)"'
 run = "node --import tsx scripts/tasks/deploy.ts"
 
 [tasks.stop]
