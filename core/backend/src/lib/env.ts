@@ -1,39 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { parse } from "yaml";
-import { coreConfigSchema } from "@lab-core/sdk-contract";
-
-function loadProductionConfig(): void {
-  const configPath = process.env.LAB_CORE_CONFIG_PATH ?? "/etc/labwebsystem/config.yaml";
-  if (!fs.existsSync(configPath)) {
-    return;
-  }
-
-  const parsed = coreConfigSchema.safeParse(parse(fs.readFileSync(configPath, "utf8")));
-  if (!parsed.success) {
-    const details = parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
-    throw new Error(`LabWebSystem config.yaml is invalid: ${details}`);
-  }
-
-  const config = parsed.data;
-  const values: Record<string, string> = {
-    LAB_CORE_INSTALLATION_ID: config.installationId,
-    LAB_CORE_ROOT_DOMAIN: config.primaryDomain,
-    LAB_CORE_DATA_DIRECTORY: config.dataDirectory,
-    LAB_CORE_DB_PATH: path.join(config.dataDirectory, "database", "database.sqlite"),
-    LAB_CORE_APPS_ROOT: path.join(config.dataDirectory, "apps"),
-    LAB_CORE_APPDATA_ROOT: path.join(config.dataDirectory, "appdata"),
-    LAB_CORE_SYNC_DIR: path.join(config.dataDirectory, "state", "generated"),
-    LAB_CORE_PROXY_CONFIG_PATH: path.join(config.dataDirectory, "state", "generated", "Caddyfile"),
-    LAB_CORE_DNS_HOSTS_PATH: path.join(config.dataDirectory, "state", "generated", "labwebsystem.hosts")
-  };
-
-  for (const [key, value] of Object.entries(values)) {
-    if (process.env[key] === undefined) {
-      process.env[key] = value;
-    }
-  }
-}
 
 function rewriteLegacyPath(baseDir: string, value: string): string {
   const legacyMappings = new Map<string, string>([
@@ -123,7 +89,6 @@ function loadDotEnvIfExists(filePath: string): void {
 }
 
 loadDotEnvIfExists(path.resolve(baseDir, "core/backend/.env"));
-loadProductionConfig();
 
 function toExecutionMode(value: string | undefined): "dry-run" | "execute" {
   if (value === "execute") {

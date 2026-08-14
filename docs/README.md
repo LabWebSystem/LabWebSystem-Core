@@ -2,6 +2,7 @@
 
 ## まず読む場所
 - 説明書一覧: `docs/readmes/説明書一覧.md`
+- Coreデプロイ仕様: `docs/readmes/LabWebSystem Coreデプロイ仕様書.md`
 - 正式仕様（現行実装準拠）: `docs/archives/20260516_230913_公式仕様統合/official_specification.md`
 
 ## フォルダの役割

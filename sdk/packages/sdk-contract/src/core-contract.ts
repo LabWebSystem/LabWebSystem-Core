@@ -9,46 +9,16 @@ export const labWebSystemLabels = {
   version: "com.labwebsystem.version"
 } as const;
 
-export const coreConfigSchema = z.object({
-  configSchemaVersion: z.number().int().positive(),
-  installationId: z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
-  primaryDomain: z.string().min(1).max(253).regex(/^[a-z0-9.-]+$/),
-  dataDirectory: z.string().min(1).refine((value) => value.startsWith("/"), {
-    message: "dataDirectory must be an absolute path"
-  })
-});
-
-export type CoreConfig = z.infer<typeof coreConfigSchema>;
-
-const imageReferenceSchema = z.object({
-  reference: z.string().min(1),
-  digest: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional()
-});
-
 export const releaseManifestSchema = z.object({
-  manifestSchemaVersion: z.number().int().positive(),
-  labWebSystemVersion: z.string().min(1),
-  configSchemaVersion: z.number().int().positive(),
-  databaseSchemaVersion: z.number().int().positive(),
-  recoveryDescriptorSchemaVersion: z.number().int().positive(),
+  manifestVersion: z.literal(1),
+  version: z.string().min(1),
   minimumLwsctlVersion: z.string().min(1),
-  platforms: z.array(z.string().min(1)).min(1),
-  images: z.object({
-    backend: imageReferenceSchema,
-    dashboard: imageReferenceSchema
+  artifacts: z.object({
+    compose: z.object({
+      name: z.literal("compose.yaml"),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/)
+    })
   }),
-  compose: z.object({
-    artifact: z.string().min(1),
-    sha256: z.string().regex(/^[a-f0-9]{64}$/)
-  }),
-  migration: z.object({
-    required: z.boolean(),
-    fromDatabaseSchemaVersion: z.number().int().positive().optional(),
-    toDatabaseSchemaVersion: z.number().int().positive(),
-    artifact: z.string().min(1).optional(),
-    backupRequired: z.boolean(),
-    rollbackSupported: z.boolean()
-  })
 });
 
 export type ReleaseManifest = z.infer<typeof releaseManifestSchema>;

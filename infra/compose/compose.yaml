@@ -1,0 +1,40 @@
+name: labwebsystem
+
+services:
+  backend:
+    image: "ghcr.io/labwebsystem/backend:${LWS_VERSION:?LWS_VERSION is required}"
+    restart: unless-stopped
+    environment:
+      LAB_CORE_VERSION: "${LWS_VERSION}"
+      LAB_CORE_INSTALLATION_ID: "${LWS_INSTALLATION_ID}"
+      LAB_CORE_ROOT_DOMAIN: "${LWS_PRIMARY_DOMAIN:?LWS_PRIMARY_DOMAIN is required}"
+      LAB_CORE_DATA_DIRECTORY: /var/lib/labwebsystem
+      LAB_CORE_DOCKER_SOCKET: /var/run/docker.sock
+    volumes:
+      - "${LWS_DATA_DIR:?LWS_DATA_DIR is required}:/var/lib/labwebsystem"
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [labwebsystem]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7300/health/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  dashboard:
+    image: "ghcr.io/labwebsystem/dashboard:${LWS_VERSION:?LWS_VERSION is required}"
+    restart: unless-stopped
+    ports:
+      - "${LWS_HTTP_BIND:-0.0.0.0:80}:80/tcp"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [labwebsystem]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+networks:
+  labwebsystem: {}
