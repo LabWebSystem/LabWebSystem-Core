@@ -2,6 +2,7 @@
 
 ## まず読む場所
 - 説明書一覧: `docs/readmes/説明書一覧.md`
+- 開発・検証・デプロイ体制: `docs/readmes/LabWebSystem Core 開発・検証・デプロイ体制仕様書.md`
 - Coreデプロイ仕様: `docs/readmes/LabWebSystem Coreデプロイ仕様書.md`
 - 正式仕様（現行実装準拠）: `docs/archives/20260516_230913_公式仕様統合/official_specification.md`
 

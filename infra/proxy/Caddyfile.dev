@@ -1,6 +1,0 @@
-{
-    auto_https off
-    admin off
-}
-
-import /data/generated/Caddyfile.dev

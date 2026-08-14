@@ -16,3 +16,5 @@ archive/extracted/
 runtime/
 temp/
 tsconfig.tsbuildinfo
+.lab-core/*
+!.lab-core/.gitkeep

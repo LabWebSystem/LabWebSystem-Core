@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Lab-Core Backend API
-  version: 0.2.0
+  version: 0.1.0
   description: |
     Lab-Core backend API の正規仕様です。
     実行単位は Job ではなく Operation を正とし、旧 `/api/jobs` と旧操作 API は含みません。

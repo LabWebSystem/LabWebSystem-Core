@@ -25,7 +25,7 @@ Production用のComposeとOCI imageは、`infra/compose/compose.yaml`、`Dockerf
 ホスト固有設定の正本は `/etc/labwebsystem/runtime.env` です。
 
 ```dotenv
-LWS_VERSION=1.2.3
+LWS_VERSION=0.1.0
 LWS_PRIMARY_DOMAIN=example.com
 LWS_INSTALLATION_ID=<stable-installation-id>
 LWS_DATA_DIR=/var/lib/labwebsystem

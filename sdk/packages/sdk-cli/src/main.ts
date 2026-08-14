@@ -11,7 +11,7 @@ import { EXIT_USAGE } from "./shared/error-codes.js";
 
 function usage(): string {
   return [
-    "Lab-Core SDK v0.0.1",
+    "Lab-Core SDK v0.1.0",
     "",
     "Usage:",
     "  labcore init [--template standard|headless|device] [--existing] [--force] [--name <appName>]",

@@ -9,12 +9,12 @@ import {
 test("release manifest contains only Compose distribution metadata", () => {
   const release = releaseManifestSchema.parse({
     manifestVersion: 1,
-    version: "0.8.0",
+    version: "0.1.0",
     minimumLwsctlVersion: "0.1.0",
     artifacts: { compose: { name: "compose.yaml", sha256: "a".repeat(64) } }
   });
 
-  assert.equal(release.version, "0.8.0");
+  assert.equal(release.version, "0.1.0");
   assert.equal(labWebSystemLabels.applicationId, "com.labwebsystem.application-id");
 
   assert.doesNotThrow(() => recoveryDescriptorSchema.parse({
