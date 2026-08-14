@@ -33,8 +33,8 @@ jobs:
         id: version
         shell: bash
         run: |
-          ref="${GITHUB_REF_NAME:-${{ inputs.ref }}}"
-          [[ "$ref" == "v0.1.0" ]]
+          ref="${{ inputs.ref || github.ref_name }}"
+          [[ "$ref" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           echo "tag=$ref" >> "$GITHUB_OUTPUT"
           echo "version=${ref#v}" >> "$GITHUB_OUTPUT"
 
@@ -89,5 +89,5 @@ jobs:
           gh release create "${{ steps.version.outputs.tag }}" \
             release-assets/release.json release-assets/compose.yaml \
             --repo "$GITHUB_REPOSITORY" \
-            --title "LabWebSystem Core $GITHUB_REF_NAME" \
+            --title "LabWebSystem Core ${{ steps.version.outputs.tag }}" \
             --generate-notes

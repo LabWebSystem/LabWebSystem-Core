@@ -23,7 +23,7 @@ LabWebSystem Core の開発、テスト、システム検証、デプロイを�
 | `mise run test` | typecheck、unit、backend API、component、軽量 integration を Docker なしで実行する。 |
 | `mise run test:container` | Docker image build、container 起動、health check、HTTP smoke test、停止、cleanup を独立して実行する。 |
 | `mise run test:system` | DNS、reverse proxy、network、dashboard、backend を含む一時環境を create → start → test → destroy の順で検証する。 |
-| `mise run deploy` | CI 検証済みの `v0.1.0` release tag を GitHub Actions の Release 入口へ渡す。開発用 `.env` は使用しない。 |
+| `mise run deploy --version vX.Y.Z` | 指定したRelease tagを作成・pushし、GitHub ActionsのRelease入口へ渡す。既存tag / Releaseは確認後に再作成できる。開発用 `.env` は使用しない。 |
 | `mise run stop` | 開発プロセスと検証用 Compose を停止する。 |
 | `mise run clean` | 開発用 DB、runtime、タスク状態などの生成物を削除する。 |
 
@@ -89,5 +89,5 @@ mock / local / lab の事前選択
 - `mise run test:container` が Docker runtime 固有の問題を検出する。
 - `mise run test:system` が独立環境を生成し、DNS / proxy を含めて検証後に破棄する。
 - CI が通常テスト、Docker build、container verification を実行する。
-- `mise run deploy` が Release の標準入口となる。
+- `mise run deploy --version vX.Y.Z` が Release の標準入口となる。
 - repository-wide の Yarn 操作と profile 選択が通常の開発フローから消えている。
