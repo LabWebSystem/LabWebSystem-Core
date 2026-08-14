@@ -4,7 +4,6 @@
   "configSchemaVersion": 1,
   "databaseSchemaVersion": 12,
   "recoveryDescriptorSchemaVersion": 1,
-  "recoveryDescriptorSchemaVersion": 1,
   "minimumLwsctlVersion": "0.4.0",
   "platforms": ["linux/amd64", "linux/arm64"],
   "images": {

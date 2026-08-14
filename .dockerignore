@@ -1,0 +1,12 @@
+.git
+.yarn/cache
+node_modules
+**/node_modules
+**/dist
+core/backend/data
+runtime
+archive
+memory/generated
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
