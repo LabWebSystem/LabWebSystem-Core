@@ -20,6 +20,7 @@ COPY --from=build /build/package.json /build/yarn.lock /build/.yarnrc.yml ./
 COPY --from=build /build/node_modules ./node_modules
 COPY --from=build /build/core/backend/package.json ./core/backend/package.json
 COPY --from=build /build/core/backend/dist ./core/backend/dist
+COPY --from=build /build/core/backend/openapi ./core/backend/openapi
 COPY --from=build /build/sdk/packages/sdk-contract/package.json ./sdk/packages/sdk-contract/package.json
 COPY --from=build /build/sdk/packages/sdk-contract/dist ./sdk/packages/sdk-contract/dist
 

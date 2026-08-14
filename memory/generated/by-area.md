@@ -14,3 +14,7 @@
 - CHG-005 | ACTIVE | - | destroy コマンドを soft / hard に分離
 - CHG-006 | ACTIVE | - | application_id ベース runtime・Compose サンドボックス・app root 削除 helper を追加
 - CHG-007 | ACTIVE | - | lwsctl向けProduction外部契約と配布基盤を追加
+- CHG-008 | ACTIVE | - | Production Backend imageへOpenAPI定義を含める
+
+## production image / backend startup
+- BUG-001 | VERIFIED | production image / backend startup | Production Backend imageからOpenAPI定義が欠落する
