@@ -23,3 +23,6 @@
 
 ## production image / backend startup
 - BUG-001 | VERIFIED | production image / backend startup | Production Backend imageからOpenAPI定義が欠落する
+
+## release-automation
+- BUG-003 | VERIFIED | release-automation | Release workflowのchecksum検証がrunnerで失敗する

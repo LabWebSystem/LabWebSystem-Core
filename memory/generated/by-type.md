@@ -12,6 +12,7 @@
 ## BUG
 - BUG-001 | VERIFIED | production image / backend startup | Production Backend imageからOpenAPI定義が欠落する
 - BUG-002 | VERIFIED | production image / Docker runtime | Production Backend imageにDocker CLIが含まれない
+- BUG-003 | VERIFIED | release-automation | Release workflowのchecksum検証がrunnerで失敗する
 
 ## CHG
 - CHG-001 | ACTIVE | - | セットアッププロファイルと system コマンドを統一

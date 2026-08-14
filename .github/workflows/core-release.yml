@@ -87,7 +87,7 @@ jobs:
           cp infra/compose/Caddyfile.production release-assets/Caddyfile.production
 
           expected_sha="$(node -p "require('./release.json').compose.sha256")"
-          actual_sha="$(sha256sum release-assets/compose.production.yml | awk '{print \$1}')"
+          actual_sha="$(sha256sum release-assets/compose.production.yml | awk '{print $1}')"
           test "$expected_sha" = "$actual_sha"
 
       - name: Publish GitHub Release
