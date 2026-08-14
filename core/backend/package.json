@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.14.2",
+    "@lab-core/sdk-contract": "workspace:*",
     "better-sqlite3": "^11.8.1",
     "dockerode": "^4.0.7",
     "hono": "^4.8.3",

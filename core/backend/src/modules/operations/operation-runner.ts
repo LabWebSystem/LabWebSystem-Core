@@ -3,6 +3,10 @@ import path from "node:path";
 import type Database from "better-sqlite3";
 import { simpleGit } from "simple-git";
 import { env } from "../../lib/env.js";
+import {
+  getApplicationLabCoreRoot,
+  getApplicationRoot
+} from "../../services/application-paths.js";
 import { recordSystemEvent } from "../events/event.repository.js";
 import { OperationLogRepository } from "./operation-log.repository.js";
 import { type OperationEventBus } from "./operation-events.js";
@@ -17,14 +21,15 @@ import {
   getRuntimeApplicationTarget,
   getSecretValues,
   markApplicationDeleted,
+  removeRecoveryDescriptor,
+  prepareComposeRuntime,
   reconcileDeploymentRouting,
   resolveProjectName,
   setApplicationStatus,
   setCommitInfo,
   setCommitPair,
   setDeploymentEnabled,
-  upsertUpdateInfo,
-  writeComposeEnvFile
+  upsertUpdateInfo
 } from "./application-runtime.js";
 import { runCommand } from "../../services/command-runner.js";
 
@@ -37,6 +42,81 @@ type OperationRunnerOptions = {
   syncInfrastructure?: SyncInfrastructureFn;
   executionMode?: "dry-run" | "execute";
 };
+
+type DeleteHelperCommand = {
+  executable: string;
+  args: string[];
+};
+
+type DeleteHelperCommandResolveOptions = {
+  useSudo?: boolean;
+  uid?: number | null;
+  pathValue?: string;
+  helperPath?: string;
+  nodePath?: string;
+  existsSync?: (candidate: string) => boolean;
+};
+
+function resolveSudoExecutableFromPath(
+  pathValue: string,
+  existsSync: (candidate: string) => boolean
+): string | null {
+  const directories = pathValue
+    .split(path.delimiter)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+
+  for (const directory of directories) {
+    const candidate = path.join(directory, "sudo");
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  for (const candidate of ["/usr/bin/sudo", "/bin/sudo", "/usr/local/bin/sudo"]) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+export function resolveAppRootDeleteHelperCommand(
+  applicationId: string,
+  options: DeleteHelperCommandResolveOptions = {}
+): DeleteHelperCommand {
+  const useSudo = options.useSudo ?? env.appRootDeleteUsesSudo;
+  const uid = options.uid ?? (typeof process.getuid === "function" ? process.getuid() : null);
+  const pathValue = options.pathValue ?? (process.env.PATH ?? "");
+  const helperPath = options.helperPath ?? env.appRootDeleteHelperPath;
+  const nodePath = options.nodePath ?? process.execPath;
+  const existsSync = options.existsSync ?? fs.existsSync;
+  const directCommand = {
+    executable: nodePath,
+    args: [helperPath, applicationId]
+  };
+
+  if (!useSudo) {
+    return directCommand;
+  }
+
+  if (uid === 0) {
+    return directCommand;
+  }
+
+  const sudoExecutable = resolveSudoExecutableFromPath(pathValue, existsSync);
+  if (!sudoExecutable) {
+    throw new Error(
+      "sudo が見つからないため app root 削除 helper を昇格実行できません。`LAB_CORE_APP_ROOT_DELETE_USE_SUDO=false` を明示するか、sudo を導入してください。"
+    );
+  }
+
+  return {
+    executable: sudoExecutable,
+    args: ["--non-interactive", nodePath, helperPath, applicationId]
+  };
+}
 
 export class OperationRunner {
   private readonly repository: OperationRepository;
@@ -56,6 +136,14 @@ export class OperationRunner {
     this.eventBus = options.eventBus;
     this.syncInfrastructure = options.syncInfrastructure ?? (() => {});
     this.executionMode = options.executionMode ?? env.executionMode;
+  }
+
+  private async runAppRootDeleteHelper(applicationId: string): Promise<void> {
+    const command = resolveAppRootDeleteHelperCommand(applicationId);
+
+    await runCommand(command.executable, command.args, {
+      executionModeOverride: this.executionMode
+    });
   }
 
   async executeOperation(operationId: string): Promise<void> {
@@ -131,15 +219,14 @@ export class OperationRunner {
       return ensured;
     });
 
-    const composeFilePath = path.resolve(repository.repoPath, target.compose_path);
-    const envFilePath = writeComposeEnvFile(target);
+    const preparedCompose = prepareComposeRuntime(target, repository.repoPath, this.executionMode);
 
     setApplicationStatus(this.db, target.application_id, "Deploying", this.now());
     await this.runStep(operationId, 3, "Inspecting compose configuration.", secretValues, async (step) => {
       const routing = reconcileDeploymentRouting(
         this.db,
         target.application_id,
-        composeFilePath,
+        preparedCompose.composeFilePath,
         target.public_service_name,
         target.public_port,
         this.executionMode
@@ -148,7 +235,7 @@ export class OperationRunner {
     });
 
     await this.runStep(operationId, 4, "Running docker compose up with build.", secretValues, async (step) => {
-      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", composeFilePath, ...(envFilePath ? ["--env-file", envFilePath] : []), "up", "-d", "--build", "--remove-orphans"], repository.repoPath, secretValues);
+      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", preparedCompose.composeFilePath, ...(preparedCompose.envFilePath ? ["--env-file", preparedCompose.envFilePath] : []), "up", "-d", "--build", "--remove-orphans"], repository.repoPath, secretValues);
     });
 
     await this.runStep(operationId, 5, "Synchronizing generated infrastructure assets.", secretValues, async (step) => {
@@ -176,14 +263,13 @@ export class OperationRunner {
   private async executeRestart(operationId: string): Promise<void> {
     const target = getRuntimeApplicationTarget(this.db, this.repository.getOperation(operationId).applicationId);
     const secretValues = getSecretValues(target);
-    const repoPath = getRepositoryPath(target.name);
-    const composeFilePath = path.resolve(repoPath, target.compose_path);
-    const envFilePath = writeComposeEnvFile(target);
+    const repoPath = getRepositoryPath(target.application_id);
+    const preparedCompose = prepareComposeRuntime(target, repoPath, this.executionMode);
     const composeProjectName = resolveProjectName(target);
 
     setApplicationStatus(this.db, target.application_id, "Deploying", this.now());
     await this.runStep(operationId, 1, "Restarting containers.", secretValues, async (step) => {
-      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", composeFilePath, ...(envFilePath ? ["--env-file", envFilePath] : []), "restart"], repoPath, secretValues);
+      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", preparedCompose.composeFilePath, ...(preparedCompose.envFilePath ? ["--env-file", preparedCompose.envFilePath] : []), "restart"], repoPath, secretValues);
     });
 
     setApplicationStatus(this.db, target.application_id, "Running", this.now());
@@ -198,14 +284,13 @@ export class OperationRunner {
   private async executeStop(operationId: string): Promise<void> {
     const target = getRuntimeApplicationTarget(this.db, this.repository.getOperation(operationId).applicationId);
     const secretValues = getSecretValues(target);
-    const repoPath = getRepositoryPath(target.name);
-    const composeFilePath = path.resolve(repoPath, target.compose_path);
-    const envFilePath = writeComposeEnvFile(target);
+    const repoPath = getRepositoryPath(target.application_id);
+    const preparedCompose = prepareComposeRuntime(target, repoPath, this.executionMode);
     const composeProjectName = resolveProjectName(target);
 
     setApplicationStatus(this.db, target.application_id, "Deploying", this.now());
     await this.runStep(operationId, 1, "Stopping docker compose services.", secretValues, async (step) => {
-      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", composeFilePath, ...(envFilePath ? ["--env-file", envFilePath] : []), "stop"], repoPath, secretValues);
+      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", preparedCompose.composeFilePath, ...(preparedCompose.envFilePath ? ["--env-file", preparedCompose.envFilePath] : []), "stop"], repoPath, secretValues);
     });
 
     await this.runStep(operationId, 2, "Synchronizing infrastructure after stop.", secretValues, async (step) => {
@@ -226,14 +311,13 @@ export class OperationRunner {
   private async executeResume(operationId: string): Promise<void> {
     const target = getRuntimeApplicationTarget(this.db, this.repository.getOperation(operationId).applicationId);
     const secretValues = getSecretValues(target);
-    const repoPath = getRepositoryPath(target.name);
-    const composeFilePath = path.resolve(repoPath, target.compose_path);
-    const envFilePath = writeComposeEnvFile(target);
+    const repoPath = getRepositoryPath(target.application_id);
+    const preparedCompose = prepareComposeRuntime(target, repoPath, this.executionMode);
     const composeProjectName = resolveProjectName(target);
 
     await this.runStep(operationId, 1, "Resuming docker compose services.", secretValues, async (step) => {
       setDeploymentEnabled(this.db, target.application_id, true);
-      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", composeFilePath, ...(envFilePath ? ["--env-file", envFilePath] : []), "up", "-d", "--build", "--remove-orphans"], repoPath, secretValues);
+      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", preparedCompose.composeFilePath, ...(preparedCompose.envFilePath ? ["--env-file", preparedCompose.envFilePath] : []), "up", "-d", "--build", "--remove-orphans"], repoPath, secretValues);
     });
 
     await this.runStep(operationId, 2, "Synchronizing infrastructure after resume.", secretValues, async (step) => {
@@ -253,18 +337,17 @@ export class OperationRunner {
   private async executeRebuild(operationId: string, parameters: Record<string, unknown>): Promise<void> {
     const target = getRuntimeApplicationTarget(this.db, this.repository.getOperation(operationId).applicationId);
     const secretValues = getSecretValues(target);
-    const repoPath = getRepositoryPath(target.name);
-    const composeFilePath = path.resolve(repoPath, target.compose_path);
-    const envFilePath = writeComposeEnvFile(target);
+    const repoPath = getRepositoryPath(target.application_id);
+    const preparedCompose = prepareComposeRuntime(target, repoPath, this.executionMode);
     const composeProjectName = resolveProjectName(target);
     const keepData = parameters.keepData !== false;
 
     setApplicationStatus(this.db, target.application_id, "Rebuilding", this.now());
     await this.runStep(operationId, 1, "Tearing down existing compose resources.", secretValues, async (step) => {
-      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", composeFilePath, ...(envFilePath ? ["--env-file", envFilePath] : []), "down", "--remove-orphans", ...(keepData ? [] : ["-v"])], repoPath, secretValues);
+      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", preparedCompose.composeFilePath, ...(preparedCompose.envFilePath ? ["--env-file", preparedCompose.envFilePath] : []), "down", "--remove-orphans", ...(keepData ? [] : ["-v"])], repoPath, secretValues);
     });
     await this.runStep(operationId, 2, "Building and starting compose resources.", secretValues, async (step) => {
-      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", composeFilePath, ...(envFilePath ? ["--env-file", envFilePath] : []), "up", "-d", "--build", "--remove-orphans"], repoPath, secretValues);
+      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", preparedCompose.composeFilePath, ...(preparedCompose.envFilePath ? ["--env-file", preparedCompose.envFilePath] : []), "up", "-d", "--build", "--remove-orphans"], repoPath, secretValues);
     });
     await this.runStep(operationId, 3, "Synchronizing infrastructure after rebuild.", secretValues, async (step) => {
       await this.syncInfrastructure(`rebuild:${target.name}`);
@@ -283,7 +366,7 @@ export class OperationRunner {
   private async executeUpdateCheck(operationId: string): Promise<void> {
     const target = getRuntimeApplicationTarget(this.db, this.repository.getOperation(operationId).applicationId);
     const secretValues = getSecretValues(target);
-    const repoPath = getRepositoryPath(target.name);
+    const repoPath = getRepositoryPath(target.application_id);
     let currentCommit = target.current_commit ?? "dry-run-current";
     let latestRemoteCommit = currentCommit;
 
@@ -322,7 +405,7 @@ export class OperationRunner {
 
     const repository = await this.runStep(operationId, 1, "Resolving repository target.", secretValues, async (step) => {
       this.writeSystemLog(operationId, step.stepId, `repository=${target.repository_url}`, secretValues);
-      return { repoPath: getRepositoryPath(target.name) };
+      return { repoPath: getRepositoryPath(target.application_id) };
     });
 
     const pulled = await this.runStep(operationId, 2, "Pulling latest repository revision.", secretValues, async (step) => {
@@ -332,14 +415,13 @@ export class OperationRunner {
       return ensured;
     });
 
-    const composeFilePath = path.resolve(repository.repoPath, target.compose_path);
-    const envFilePath = writeComposeEnvFile(target);
+    const preparedCompose = prepareComposeRuntime(target, repository.repoPath, this.executionMode);
 
     await this.runStep(operationId, 3, "Inspecting compose configuration.", secretValues, async (step) => {
       const routing = reconcileDeploymentRouting(
         this.db,
         target.application_id,
-        composeFilePath,
+        preparedCompose.composeFilePath,
         target.public_service_name,
         target.public_port,
         this.executionMode
@@ -348,7 +430,7 @@ export class OperationRunner {
     });
 
     await this.runStep(operationId, 4, "Applying compose update.", secretValues, async (step) => {
-      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", composeFilePath, ...(envFilePath ? ["--env-file", envFilePath] : []), "up", "-d", "--build", "--remove-orphans"], repository.repoPath, secretValues);
+      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", preparedCompose.composeFilePath, ...(preparedCompose.envFilePath ? ["--env-file", preparedCompose.envFilePath] : []), "up", "-d", "--build", "--remove-orphans"], repository.repoPath, secretValues);
     });
 
     await this.runStep(operationId, 5, "Synchronizing infrastructure after update.", secretValues, async (step) => {
@@ -379,7 +461,7 @@ export class OperationRunner {
     }
 
     const repository = await this.runStep(operationId, 1, "Resolving repository target.", secretValues, async () => {
-      return { repoPath: getRepositoryPath(target.name) };
+      return { repoPath: getRepositoryPath(target.application_id) };
     });
 
     await this.runStep(operationId, 2, "Checking out rollback target revision.", secretValues, async (step) => {
@@ -391,14 +473,13 @@ export class OperationRunner {
       this.writeSystemLog(operationId, step.stepId, `rollbackTarget=${rollbackTarget}`, secretValues);
     });
 
-    const composeFilePath = path.resolve(repository.repoPath, target.compose_path);
-    const envFilePath = writeComposeEnvFile(target);
+    const preparedCompose = prepareComposeRuntime(target, repository.repoPath, this.executionMode);
 
     await this.runStep(operationId, 3, "Inspecting compose configuration.", secretValues, async (step) => {
       const routing = reconcileDeploymentRouting(
         this.db,
         target.application_id,
-        composeFilePath,
+        preparedCompose.composeFilePath,
         target.public_service_name,
         target.public_port,
         this.executionMode
@@ -407,7 +488,7 @@ export class OperationRunner {
     });
 
     await this.runStep(operationId, 4, "Applying rollback compose revision.", secretValues, async (step) => {
-      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", composeFilePath, ...(envFilePath ? ["--env-file", envFilePath] : []), "up", "-d", "--build", "--remove-orphans"], repository.repoPath, secretValues);
+      await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", preparedCompose.composeFilePath, ...(preparedCompose.envFilePath ? ["--env-file", preparedCompose.envFilePath] : []), "up", "-d", "--build", "--remove-orphans"], repository.repoPath, secretValues);
     });
 
     await this.runStep(operationId, 5, "Synchronizing infrastructure after rollback.", secretValues, async (step) => {
@@ -429,8 +510,10 @@ export class OperationRunner {
     const target = getRuntimeApplicationTarget(this.db, this.repository.getOperation(operationId).applicationId);
     const secretValues = getSecretValues(target);
     const composeProjectName = resolveProjectName(target);
-    const repoPath = getRepositoryPath(target.name);
-    const appDataPath = getAppDataPath(target.name);
+    const repoPath = getRepositoryPath(target.application_id);
+    const appDataPath = getAppDataPath(target.application_id);
+    const labCorePath = getApplicationLabCoreRoot(target.application_id);
+    const appRootPath = getApplicationRoot(target.application_id);
     const mode = typeof parameters.mode === "string" ? parameters.mode : "configOnly";
     const keepData = mode !== "full";
 
@@ -444,29 +527,43 @@ export class OperationRunner {
         return;
       }
 
-      const composeFilePath = path.resolve(repoPath, target.compose_path);
-      const envFilePath = writeComposeEnvFile(target);
-      if (fs.existsSync(composeFilePath)) {
-        await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", composeFilePath, ...(envFilePath ? ["--env-file", envFilePath] : []), "down", "--remove-orphans", ...(keepData ? [] : ["-v"])], repoPath, secretValues);
-        return;
+      try {
+        const preparedCompose = prepareComposeRuntime(target, repoPath, this.executionMode);
+        if (fs.existsSync(preparedCompose.composeFilePath)) {
+          await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "-f", preparedCompose.composeFilePath, ...(preparedCompose.envFilePath ? ["--env-file", preparedCompose.envFilePath] : []), "down", "--remove-orphans", ...(keepData ? [] : ["-v"])], repoPath, secretValues);
+          return;
+        }
+      } catch (error) {
+        this.writeSystemLog(
+          operationId,
+          step.stepId,
+          `normalized compose unavailable, fallback to project-only down: ${error instanceof Error ? error.message : String(error)}`,
+          secretValues
+        );
       }
 
       await this.executeLoggedCommand(step, "docker", ["compose", "-p", composeProjectName, "down", "--remove-orphans", ...(keepData ? [] : ["-v"])], undefined, secretValues);
     });
 
     await this.runStep(operationId, 3, "Cleaning up source directory when requested.", secretValues, async (step) => {
-      if (mode === "sourceAndConfig" || mode === "full") {
+      if (mode === "full") {
+        await this.runAppRootDeleteHelper(target.application_id);
+        fs.rmSync(appDataPath, { recursive: true, force: true });
+        this.writeSystemLog(operationId, step.stepId, `removed app root ${appRootPath} via helper`, secretValues);
+        return;
+      }
+      if (mode === "sourceAndConfig") {
         fs.rmSync(repoPath, { recursive: true, force: true });
+        fs.rmSync(labCorePath, { recursive: true, force: true });
         this.writeSystemLog(operationId, step.stepId, `removed source directory ${repoPath}`, secretValues);
         return;
       }
-      this.writeSystemLog(operationId, step.stepId, "source directory kept", secretValues);
+      this.writeSystemLog(operationId, step.stepId, "source and app root kept", secretValues);
     });
 
     await this.runStep(operationId, 4, "Cleaning up appdata when requested.", secretValues, async (step) => {
       if (mode === "full") {
-        fs.rmSync(appDataPath, { recursive: true, force: true });
-        this.writeSystemLog(operationId, step.stepId, `removed appdata directory ${appDataPath}`, secretValues);
+        this.writeSystemLog(operationId, step.stepId, `app root helper removed data under ${appDataPath}`, secretValues);
         return;
       }
       this.writeSystemLog(operationId, step.stepId, "appdata kept", secretValues);
@@ -474,6 +571,7 @@ export class OperationRunner {
 
     await this.runStep(operationId, 5, "Synchronizing infrastructure after delete.", secretValues, async (step) => {
       markApplicationDeleted(this.db, target.application_id, this.now());
+      removeRecoveryDescriptor(target.application_id);
       await this.syncInfrastructure(`delete:${target.name}`);
       this.writeSystemLog(operationId, step.stepId, `syncInfrastructure delete:${target.name}`, secretValues);
     });

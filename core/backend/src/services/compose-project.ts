@@ -35,33 +35,19 @@ export function buildLegacyComposeProjectName(applicationName: string): string {
   return sanitizeComposeProjectName(applicationName);
 }
 
-export function buildComposeProjectName(
-  applicationId: string,
-  applicationName: string
-): string {
-  const baseName = buildLegacyComposeProjectName(applicationName);
-  const normalizedId = sanitizeComposeProjectName(applicationId, "").slice(0, 8);
-
-  if (normalizedId.length === 0) {
-    return baseName;
-  }
-
-  return (
-    trimComposeProjectName(`${baseName}-${normalizedId}`) ||
-    sanitizeComposeProjectName(`labcore-${normalizedId}`)
-  );
+export function buildComposeProjectName(applicationId: string): string {
+  const normalizedId = sanitizeComposeProjectName(applicationId, "labcore-app");
+  return trimComposeProjectName(`lws-${normalizedId}`) || "lws-app";
 }
 
 export function resolveComposeProjectName(
   applicationId: string,
-  applicationName: string,
+  _applicationName: string,
   storedProjectName?: string | null
 ): string {
-  const normalizedStored = sanitizeComposeProjectName(storedProjectName ?? "", "");
-
-  if (normalizedStored.length > 0) {
-    return normalizedStored;
-  }
-
-  return buildComposeProjectName(applicationId, applicationName);
+  const normalizedStored =
+    typeof storedProjectName === "string" && storedProjectName.trim().length > 0
+      ? sanitizeComposeProjectName(storedProjectName, "")
+      : "";
+  return normalizedStored.length > 0 ? normalizedStored : buildComposeProjectName(applicationId);
 }

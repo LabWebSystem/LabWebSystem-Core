@@ -983,6 +983,7 @@ __metadata:
   resolution: "@lab-core/backend@workspace:core/backend"
   dependencies:
     "@hono/node-server": "npm:^1.14.2"
+    "@lab-core/sdk-contract": "workspace:*"
     "@types/better-sqlite3": "npm:^7.6.13"
     "@types/dockerode": "npm:^3.3.42"
     "@types/node": "npm:^22.16.3"

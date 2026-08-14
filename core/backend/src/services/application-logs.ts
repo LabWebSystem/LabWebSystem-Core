@@ -4,6 +4,11 @@ import { db, nowIso } from "../lib/db.js";
 import { env } from "../lib/env.js";
 import { runCommand } from "./command-runner.js";
 import { resolveComposeProjectName } from "./compose-project.js";
+import {
+  getApplicationSourceRoot,
+  getGeneratedComposeEnvPath,
+  getNormalizedComposePath
+} from "./application-paths.js";
 
 type AppDeploymentRow = {
   application_id: string;
@@ -74,7 +79,7 @@ function parseLogLines(stdout: string): string[] {
 
 export async function listApplicationServices(applicationId: string): Promise<string[]> {
   const app = getAppDeployment(applicationId);
-  const repoPath = path.join(env.appsRoot, app.name);
+  const repoPath = getApplicationSourceRoot(app.application_id);
   const composeProjectName = resolveComposeProjectName(app.application_id, app.name, app.compose_project_name);
 
   const servicesFromDb = db
@@ -99,15 +104,20 @@ export async function listApplicationServices(applicationId: string): Promise<st
     return mergedDefaults;
   }
 
-  const composeFilePath = path.resolve(repoPath, app.compose_path);
+  const composeFilePath = fs.existsSync(getNormalizedComposePath(app.application_id))
+    ? getNormalizedComposePath(app.application_id)
+    : path.resolve(repoPath, app.compose_path);
   if (!fs.existsSync(composeFilePath)) {
     return mergedDefaults;
   }
+  const envFilePath = fs.existsSync(getGeneratedComposeEnvPath(app.application_id))
+    ? getGeneratedComposeEnvPath(app.application_id)
+    : null;
 
   try {
     const result = await runCommand(
       "docker",
-      ["compose", "-p", composeProjectName, "-f", composeFilePath, "config", "--services"],
+      ["compose", "-p", composeProjectName, "-f", composeFilePath, ...(envFilePath ? ["--env-file", envFilePath] : []), "config", "--services"],
       { cwd: repoPath }
     );
     const discovered = parseServiceListFromComposeConfig(result.stdout);
@@ -122,7 +132,7 @@ export async function readApplicationLogs(
   options: { service?: string; tail: number }
 ): Promise<ApplicationLogSnapshot> {
   const app = getAppDeployment(applicationId);
-  const repoPath = path.join(env.appsRoot, app.name);
+  const repoPath = getApplicationSourceRoot(app.application_id);
   const composeProjectName = resolveComposeProjectName(app.application_id, app.name, app.compose_project_name);
 
   if (env.executionMode === "dry-run") {
@@ -159,12 +169,17 @@ export async function readApplicationLogs(
     throw new Error(`アプリソースが見つかりません: ${repoPath}`);
   }
 
-  const composeFilePath = path.resolve(repoPath, app.compose_path);
+  const composeFilePath = fs.existsSync(getNormalizedComposePath(app.application_id))
+    ? getNormalizedComposePath(app.application_id)
+    : path.resolve(repoPath, app.compose_path);
   if (!fs.existsSync(composeFilePath)) {
     throw new Error(`compose ファイルが見つかりません: ${composeFilePath}`);
   }
+  const envFilePath = fs.existsSync(getGeneratedComposeEnvPath(app.application_id))
+    ? getGeneratedComposeEnvPath(app.application_id)
+    : null;
 
-  const args = ["compose", "-p", composeProjectName, "-f", composeFilePath, "logs", "--no-color", "--tail", String(options.tail)];
+  const args = ["compose", "-p", composeProjectName, "-f", composeFilePath, ...(envFilePath ? ["--env-file", envFilePath] : []), "logs", "--no-color", "--tail", String(options.tail)];
   if (options.service) {
     args.push(options.service);
   }

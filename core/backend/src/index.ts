@@ -1,4 +1,5 @@
 import { serve } from "@hono/node-server";
+import fs from "node:fs";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
@@ -63,9 +64,29 @@ app.use("/api/*", requestIdMiddleware);
 app.get("/health", (c) => {
   return c.json({
     ok: true,
+    ready: isReady(),
     timestamp: nowIso()
   });
 });
+
+app.get("/health/live", (c) => c.json({ ok: true, timestamp: nowIso() }));
+
+app.get("/health/ready", (c) => {
+  const ready = isReady();
+  return c.json({ ok: ready, ready, timestamp: nowIso() }, ready ? 200 : 503);
+});
+
+function isReady(): boolean {
+  try {
+    for (const directory of [env.dataDirectory, env.appsRoot, env.appDataRoot, env.generatedSyncDir]) {
+      fs.accessSync(directory, fs.constants.R_OK | fs.constants.W_OK);
+    }
+    db.prepare("SELECT 1").get();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 app.route(
   "/api/applications",
@@ -90,7 +111,7 @@ app.route("/api/testing", testingRouter);
 app.get("/api", (c) => {
   return c.json({
     service: "lab-core-backend",
-    version: "0.1.0",
+    version: env.version,
     timestamp: nowIso(),
     openapi: {
       jsonUrl: "/api/openapi.json",

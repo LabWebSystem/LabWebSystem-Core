@@ -1,5 +1,39 @@
 import fs from "node:fs";
 import path from "node:path";
+import { parse } from "yaml";
+import { coreConfigSchema } from "@lab-core/sdk-contract";
+
+function loadProductionConfig(): void {
+  const configPath = process.env.LAB_CORE_CONFIG_PATH ?? "/etc/labwebsystem/config.yaml";
+  if (!fs.existsSync(configPath)) {
+    return;
+  }
+
+  const parsed = coreConfigSchema.safeParse(parse(fs.readFileSync(configPath, "utf8")));
+  if (!parsed.success) {
+    const details = parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
+    throw new Error(`LabWebSystem config.yaml is invalid: ${details}`);
+  }
+
+  const config = parsed.data;
+  const values: Record<string, string> = {
+    LAB_CORE_INSTALLATION_ID: config.installationId,
+    LAB_CORE_ROOT_DOMAIN: config.primaryDomain,
+    LAB_CORE_DATA_DIRECTORY: config.dataDirectory,
+    LAB_CORE_DB_PATH: path.join(config.dataDirectory, "database", "database.sqlite"),
+    LAB_CORE_APPS_ROOT: path.join(config.dataDirectory, "apps"),
+    LAB_CORE_APPDATA_ROOT: path.join(config.dataDirectory, "appdata"),
+    LAB_CORE_SYNC_DIR: path.join(config.dataDirectory, "state", "generated"),
+    LAB_CORE_PROXY_CONFIG_PATH: path.join(config.dataDirectory, "state", "generated", "Caddyfile"),
+    LAB_CORE_DNS_HOSTS_PATH: path.join(config.dataDirectory, "state", "generated", "labwebsystem.hosts")
+  };
+
+  for (const [key, value] of Object.entries(values)) {
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
 
 function rewriteLegacyPath(baseDir: string, value: string): string {
   const legacyMappings = new Map<string, string>([
@@ -89,6 +123,7 @@ function loadDotEnvIfExists(filePath: string): void {
 }
 
 loadDotEnvIfExists(path.resolve(baseDir, "core/backend/.env"));
+loadProductionConfig();
 
 function toExecutionMode(value: string | undefined): "dry-run" | "execute" {
   if (value === "execute") {
@@ -157,6 +192,9 @@ function toCsvList(value: string | undefined): string[] {
 export const env = {
   profile: toProfile(process.env.LAB_CORE_PROFILE),
   port: Number(process.env.LAB_CORE_PORT ?? 7300),
+  version: process.env.LAB_CORE_VERSION ?? "0.1.0",
+  installationId: process.env.LAB_CORE_INSTALLATION_ID ?? "development",
+  dataDirectory: toAbsolutePath(baseDir, process.env.LAB_CORE_DATA_DIRECTORY ?? "./runtime"),
   dbPath: toAbsolutePath(baseDir, process.env.LAB_CORE_DB_PATH ?? "./core/backend/data/database.sqlite"),
   dockerSocket: process.env.LAB_CORE_DOCKER_SOCKET ?? "/var/run/docker.sock",
   appsRoot: toAbsolutePath(baseDir, process.env.LAB_CORE_APPS_ROOT ?? "./runtime/apps"),
@@ -175,6 +213,11 @@ export const env = {
     process.env.LAB_CORE_DNS_HOSTS_PATH ?? "./core/backend/data/generated/fukaya-sus.hosts"
   ),
   generatedSyncDir: toAbsolutePath(baseDir, process.env.LAB_CORE_SYNC_DIR ?? "./core/backend/data/generated"),
+  appRootDeleteHelperPath: toAbsolutePath(
+    baseDir,
+    process.env.LAB_CORE_APP_ROOT_DELETE_HELPER_PATH ?? "./core/backend/scripts/delete-app-root.mjs"
+  ),
+  appRootDeleteUsesSudo: toBoolean(process.env.LAB_CORE_APP_ROOT_DELETE_USE_SUDO, true),
   dnsServerEnabled: toBoolean(process.env.LAB_CORE_DNS_SERVER_ENABLED, true),
   dnsBindHost: parseHostPort(process.env.LAB_CORE_DNS_BIND)?.host ?? process.env.LAB_CORE_DNS_BIND_HOST ?? "127.0.0.1",
   dnsPort: parseHostPort(process.env.LAB_CORE_DNS_BIND)?.port ?? toPort(process.env.LAB_CORE_DNS_PORT, defaultDnsPort()),

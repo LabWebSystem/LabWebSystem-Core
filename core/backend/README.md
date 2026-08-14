@@ -56,7 +56,9 @@
 ## 既定パス（未設定時）
 - `LAB_CORE_DB_PATH=./core/backend/data/database.sqlite`
 - `LAB_CORE_APPS_ROOT=./runtime/apps`
-- `LAB_CORE_APPDATA_ROOT=./runtime/appdata`
+- アプリ runtime layout: `runtime/apps/<application_id>/{src,data,.lab-core}`
+- `LAB_CORE_APP_ROOT_DELETE_HELPER_PATH=./core/backend/scripts/delete-app-root.mjs`
+- `LAB_CORE_APP_ROOT_DELETE_USE_SUDO=true`
 
 ## 生成ファイル
 - `LAB_CORE_PROXY_CONFIG_PATH`（Caddy 設定）

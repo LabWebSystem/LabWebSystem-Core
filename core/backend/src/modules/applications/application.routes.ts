@@ -3,8 +3,8 @@ import { Hono } from "hono";
 import fs from "node:fs";
 import path from "node:path";
 import { ZodError } from "zod";
-import { env } from "../../lib/env.js";
 import { jsonError, requestIdMiddleware } from "../../lib/http.js";
+import { getApplicationSourceRoot } from "../../services/application-paths.js";
 import { assessApplicationHealth } from "../../services/application-health.js";
 import {
   listApplicationServices,
@@ -42,6 +42,8 @@ type CreateApplicationsApiRouterOptions = {
 export function createApplicationsApiRouter(options: CreateApplicationsApiRouterOptions) {
   const router = new Hono();
   const repository = new ApplicationRepository(options.db);
+  const legacyOperationHint =
+    "この endpoint は廃止されました。/api/applications/:applicationId/operations で operation を作成してください。";
 
   router.use("*", requestIdMiddleware);
 
@@ -157,7 +159,7 @@ export function createApplicationsApiRouter(options: CreateApplicationsApiRouter
       typeof detail.application.name === "string" &&
       typeof deployment.compose_path === "string"
     ) {
-      const repoPath = path.join(env.appsRoot, detail.application.name);
+      const repoPath = getApplicationSourceRoot(String(detail.application.application_id));
       const selectedComposePath = deployment.compose_path;
       const fallbackServices = [
         buildFallbackServiceCandidate(
@@ -297,7 +299,7 @@ export function createApplicationsApiRouter(options: CreateApplicationsApiRouter
     const requestedComposePath =
       c.req.query("composePath") ?? String(detail.deployment.compose_path);
 
-    const repoPath = path.join(env.appsRoot, detail.application.name);
+    const repoPath = getApplicationSourceRoot(String(detail.application.application_id));
 
     const fallbackServices = [
       buildFallbackServiceCandidate(
@@ -577,6 +579,25 @@ export function createApplicationsApiRouter(options: CreateApplicationsApiRouter
       });
     }
   });
+
+  const removedLegacyEndpoint = (c: any) =>
+    jsonError(c, 404, "ENDPOINT_REMOVED", legacyOperationHint, {
+      applicationId: c.req.param("applicationId")
+    });
+
+  for (const routePath of [
+    "/:applicationId/restart",
+    "/:applicationId/stop",
+    "/:applicationId/resume",
+    "/:applicationId/rebuild",
+    "/:applicationId/rollback",
+    "/:applicationId/update",
+    "/:applicationId/update-check"
+  ]) {
+    router.post(routePath, removedLegacyEndpoint);
+  }
+
+  router.delete("/:applicationId", removedLegacyEndpoint);
 
   return router;
 }
