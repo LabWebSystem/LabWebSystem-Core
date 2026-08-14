@@ -15,6 +15,7 @@ Productionでは、ホスト上のLabWebSystem-Core repository、Node.js、Yarn�
   database/
   apps/<application-id>/
   appdata/<application-id>/
+  generated/
 ```
 
 Production用のComposeとOCI imageは、`infra/compose/compose.yaml`、`Dockerfile.backend`、`Dockerfile.dashboard`で定義します。GitHub Releaseには`release.json`と`compose.yaml`だけを含めます。起動時にbuildやrepositoryのbind mountは行いません。
@@ -30,7 +31,7 @@ LWS_INSTALLATION_ID=<stable-installation-id>
 LWS_DATA_DIR=/var/lib/labwebsystem
 ```
 
-ComposeがこれらをBackend環境変数、image tag、永続データのbind mountへ変換します。Backend/Dashboardごとの個別設定はありません。
+ComposeがこれらをBackend環境変数、image tag、永続データのbind mountへ変換します。Backendのreadinessに必要な`dataDirectory`、`appsRoot`、`appDataRoot`、`generatedSyncDir`は、`/var/lib/labwebsystem`配下へ割り当てます。Backend/Dashboardごとの個別設定はありません。
 
 ## Health
 

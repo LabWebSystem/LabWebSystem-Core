@@ -9,9 +9,19 @@ services:
       LAB_CORE_INSTALLATION_ID: "${LWS_INSTALLATION_ID}"
       LAB_CORE_ROOT_DOMAIN: "${LWS_PRIMARY_DOMAIN:?LWS_PRIMARY_DOMAIN is required}"
       LAB_CORE_DATA_DIRECTORY: /var/lib/labwebsystem
+      LAB_CORE_DB_PATH: /var/lib/labwebsystem/database/database.sqlite
+      LAB_CORE_APPS_ROOT: /var/lib/labwebsystem/apps
+      LAB_CORE_APPDATA_ROOT: /var/lib/labwebsystem/appdata
+      LAB_CORE_SYNC_DIR: /var/lib/labwebsystem/generated
+      LAB_CORE_PROXY_CONFIG_PATH: /var/lib/labwebsystem/generated/Caddyfile
+      LAB_CORE_DNS_HOSTS_PATH: /var/lib/labwebsystem/generated/fukaya-sus.hosts
       LAB_CORE_DOCKER_SOCKET: /var/run/docker.sock
     volumes:
       - "${LWS_DATA_DIR:?LWS_DATA_DIR is required}:/var/lib/labwebsystem"
+      - "${LWS_DATA_DIR:?LWS_DATA_DIR is required}/database:/var/lib/labwebsystem/database"
+      - "${LWS_DATA_DIR:?LWS_DATA_DIR is required}/apps:/var/lib/labwebsystem/apps"
+      - "${LWS_DATA_DIR:?LWS_DATA_DIR is required}/appdata:/var/lib/labwebsystem/appdata"
+      - "${LWS_DATA_DIR:?LWS_DATA_DIR is required}/generated:/var/lib/labwebsystem/generated"
       - /var/run/docker.sock:/var/run/docker.sock
     networks: [labwebsystem]
     healthcheck:

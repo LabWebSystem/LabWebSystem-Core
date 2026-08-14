@@ -14,6 +14,7 @@
 - BUG-001 | VERIFIED | production image / backend startup | Production Backend imageからOpenAPI定義が欠落する
 - BUG-002 | VERIFIED | production image / Docker runtime | Production Backend imageにDocker CLIが含まれない
 - BUG-003 | VERIFIED | release-automation | Release workflowのchecksum検証がrunnerで失敗する
+- BUG-004 | VERIFIED | production compose / backend readiness | Production Compose の Backend readiness 用ディレクトリが未設定
 
 ## CHG
 - CHG-001 | ACTIVE | - | セットアッププロファイルと system コマンドを統一
@@ -26,6 +27,7 @@
 - CHG-008 | ACTIVE | - | Production Backend imageへOpenAPI定義を含める
 - CHG-009 | SUPERSEDED | - | Release manifestとmulti-arch公開workflowを追加
 - CHG-010 | ACTIVE | - | Coreデプロイを最小Compose Releaseへ移行
+- CHG-011 | ACTIVE | - | Production Compose の Backend 永続パスを readiness 契約へ統一
 
 ## SUP
 - SUP-001 | ACTIVE | - | 旧Core外部契約とRelease公開方式を最小Compose契約で置換する
