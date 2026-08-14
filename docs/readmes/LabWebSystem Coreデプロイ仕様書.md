@@ -41,7 +41,10 @@ image情報、DB schema、migration、rollback、Application情報、architectur
 └── runtime.env
 
 /var/lib/labwebsystem/
-└── persistent data
+├── database/
+├── apps/
+├── appdata/
+└── generated/
 ```
 
 container、image、network、Composeファイルは再生成可能であり、DBと利用者データはReleaseから独立する。
@@ -72,3 +75,5 @@ docker compose ps
 ## Health
 
 ComposeはDocker healthcheckでCoreを監視する。Backendは`/health/live`と`/health/ready`を公開し、利用者とlwsctlはready / not readyだけを判断する。DB migrationなどの起動準備はCore内部の責務とする。
+
+Backendのreadinessに必要な`dataDirectory`、`appsRoot`、`appDataRoot`、`generatedSyncDir`は、すべて`/var/lib/labwebsystem`配下の永続ディレクトリへ割り当てる。Composeはこれらのサブディレクトリを個別にbind mountするため、初回起動時も各パスが存在し、読み書き可能になる。
