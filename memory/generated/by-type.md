@@ -16,6 +16,7 @@
 - BUG-002 | VERIFIED | production image / Docker runtime | Production Backend imageにDocker CLIが含まれない
 - BUG-003 | VERIFIED | release-automation | Release workflowのchecksum検証がrunnerで失敗する
 - BUG-004 | VERIFIED | production compose / backend readiness | Production Compose の Backend readiness 用ディレクトリが未設定
+- BUG-005 | VERIFIED | developer workflow / deploy | deploy が未タグの検証済みHEADで不可読なGitエラーを返す
 
 ## CHG
 - CHG-001 | SUPERSEDED | - | セットアッププロファイルと system コマンドを統一
@@ -30,6 +31,7 @@
 - CHG-010 | ACTIVE | - | Coreデプロイを最小Compose Releaseへ移行
 - CHG-011 | ACTIVE | - | Production Compose の Backend 永続パスを readiness 契約へ統一
 - CHG-012 | ACTIVE | - | mise task 中心の開発・検証・デプロイ体制へ移行
+- CHG-013 | ACTIVE | - | deploy task がrelease tagを準備してCIを起動するよう修正
 
 ## SUP
 - SUP-001 | ACTIVE | - | 旧Core外部契約とRelease公開方式を最小Compose契約で置換する

@@ -10,6 +10,7 @@
 - BUG-002 | VERIFIED | production image / Docker runtime | Production Backend imageにDocker CLIが含まれない
 - BUG-003 | VERIFIED | release-automation | Release workflowのchecksum検証がrunnerで失敗する
 - BUG-004 | VERIFIED | production compose / backend readiness | Production Compose の Backend readiness 用ディレクトリが未設定
+- BUG-005 | VERIFIED | developer workflow / deploy | deploy が未タグの検証済みHEADで不可読なGitエラーを返す
 - CHG-003 | ACTIVE | - | Operation 基盤と jobs→operations migration の土台を追加
 - CHG-004 | ACTIVE | - | Application 正規API・Operation Runner・OpenAPI/README・dashboard API client を同期更新
 - CHG-006 | ACTIVE | - | application_id ベース runtime・Compose サンドボックス・app root 削除 helper を追加
@@ -17,5 +18,6 @@
 - CHG-010 | ACTIVE | - | Coreデプロイを最小Compose Releaseへ移行
 - CHG-011 | ACTIVE | - | Production Compose の Backend 永続パスを readiness 契約へ統一
 - CHG-012 | ACTIVE | - | mise task 中心の開発・検証・デプロイ体制へ移行
+- CHG-013 | ACTIVE | - | deploy task がrelease tagを準備してCIを起動するよう修正
 - SUP-001 | ACTIVE | - | 旧Core外部契約とRelease公開方式を最小Compose契約で置換する
 - SUP-002 | ACTIVE | - | profile / system Yarn 操作体系を mise task 体系で置換する
