@@ -1,5 +1,6 @@
 import path from "node:path";
 import { stringify } from "yaml";
+import { labWebSystemLabels } from "@lab-core/sdk-contract";
 import {
   getExistingAncestorRealPath,
   isPathWithin
@@ -588,7 +589,17 @@ export function sandboxComposeForRuntime(options: ComposeSandboxOptions): {
       throw new Error(`services.${serviceName}.extends は使用できません。`);
     }
 
-    const nextService: JsonRecord = { ...serviceValue };
+    const nextService: JsonRecord = {
+      ...serviceValue,
+      labels: {
+        ...(isRecord(serviceValue.labels) ? serviceValue.labels : {}),
+        [labWebSystemLabels.managed]: "true",
+        [labWebSystemLabels.installationId]: process.env.LAB_CORE_INSTALLATION_ID ?? "development",
+        [labWebSystemLabels.role]: "application",
+        [labWebSystemLabels.applicationId]: options.applicationId,
+        [labWebSystemLabels.version]: process.env.LAB_CORE_VERSION ?? "0.1.0"
+      }
+    };
 
     if (serviceValue.build !== undefined) {
       nextService.build = rewriteBuild(serviceValue.build, sourceScopedOptions, `services.${serviceName}.build`);

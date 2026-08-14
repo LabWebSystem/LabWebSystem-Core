@@ -3,6 +3,7 @@ import path from "node:path";
 import type Database from "better-sqlite3";
 import { simpleGit } from "simple-git";
 import { parseDocument, stringify } from "yaml";
+import { labWebSystemLabels, type RecoveryDescriptor } from "@lab-core/sdk-contract";
 import { env } from "../../lib/env.js";
 import { runCommand } from "../../services/command-runner.js";
 import { chooseRecommendedComposeService, inspectComposeYaml } from "../../services/compose-inspection.js";
@@ -12,6 +13,7 @@ import {
   getApplicationDataRoot,
   getApplicationLabCoreRoot,
   getApplicationRoot,
+  getRecoveryDescriptorPath,
   getApplicationSourceRoot,
   getGeneratedComposeEnvPath,
   getNormalizedComposePath
@@ -294,10 +296,69 @@ export function prepareComposeRuntime(
 
   fs.writeFileSync(normalizedComposePath, sandboxed.normalizedYaml, "utf8");
 
+  writeRecoveryDescriptor(target, {
+    composeFilePath: normalizedComposePath,
+    envFilePath
+  });
+
   return {
     composeFilePath: normalizedComposePath,
     envFilePath
   };
+}
+
+export function writeRecoveryDescriptor(
+  target: RuntimeApplicationTarget,
+  prepared: { composeFilePath: string; envFilePath: string | null }
+): string {
+  const projectName = resolveProjectName(target);
+  const descriptor: RecoveryDescriptor = {
+    descriptorSchemaVersion: 1,
+    applicationId: target.application_id,
+    repositoryPath: getRepositoryPath(target.application_id),
+    imageIdentifier: null,
+    build: {
+      composePath: target.compose_path,
+      composeProjectName: projectName,
+      serviceName: target.public_service_name
+    },
+    runtime: {
+      normalizedComposePath: prepared.composeFilePath,
+      composeEnvPath: prepared.envFilePath,
+      publicServiceName: target.public_service_name,
+      publicPort: target.public_port,
+      hostname: target.hostname
+    },
+    appdataPath: getAppDataPath(target.application_id),
+    docker: {
+      labels: {
+        [labWebSystemLabels.managed]: "true",
+        [labWebSystemLabels.installationId]: env.installationId,
+        [labWebSystemLabels.role]: "application",
+        [labWebSystemLabels.applicationId]: target.application_id,
+        [labWebSystemLabels.version]: env.version
+      },
+      resources: {
+        containers: [],
+        networks: [projectName + "_default"],
+        volumes: []
+      }
+    },
+    updatedAt: new Date().toISOString()
+  };
+
+  const descriptorPath = getRecoveryDescriptorPath(target.application_id);
+  const temporaryPath = `${descriptorPath}.tmp`;
+  fs.writeFileSync(temporaryPath, `${JSON.stringify(descriptor, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  fs.renameSync(temporaryPath, descriptorPath);
+  return descriptorPath;
+}
+
+export function removeRecoveryDescriptor(applicationId: string): void {
+  const descriptorPath = getRecoveryDescriptorPath(applicationId);
+  if (fs.existsSync(descriptorPath)) {
+    fs.rmSync(descriptorPath, { force: true });
+  }
 }
 
 function buildComposeArgs(

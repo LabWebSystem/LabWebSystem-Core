@@ -1,0 +1,78 @@
+name: labwebsystem
+
+x-labwebsystem-labels: &labwebsystem-labels
+  com.labwebsystem.managed: "true"
+  com.labwebsystem.installation-id: "${LAB_CORE_INSTALLATION_ID:?LAB_CORE_INSTALLATION_ID is required}"
+  com.labwebsystem.version: "${LAB_CORE_VERSION:?LAB_CORE_VERSION is required}"
+
+services:
+  backend:
+    image: "${LAB_CORE_BACKEND_IMAGE:-ghcr.io/labwebsystem/backend}:${LAB_CORE_VERSION:?LAB_CORE_VERSION is required}"
+    restart: unless-stopped
+    labels:
+      <<: *labwebsystem-labels
+      com.labwebsystem.role: backend
+    environment:
+      LAB_CORE_CONFIG_PATH: /etc/labwebsystem/config.yaml
+      LAB_CORE_PORT: "7300"
+      LAB_CORE_DOCKER_SOCKET: /var/run/docker.sock
+    volumes:
+      - /etc/labwebsystem/config.yaml:/etc/labwebsystem/config.yaml:ro
+      - ${LAB_CORE_DATA_DIRECTORY:?LAB_CORE_DATA_DIRECTORY is required}:/var/lib/labwebsystem
+      - labwebsystem_cache:/var/lib/labwebsystem/cache
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - labwebsystem
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7300/health/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  dashboard:
+    image: "${LAB_CORE_DASHBOARD_IMAGE:-ghcr.io/labwebsystem/dashboard}:${LAB_CORE_VERSION:?LAB_CORE_VERSION is required}"
+    restart: unless-stopped
+    labels:
+      <<: *labwebsystem-labels
+      com.labwebsystem.role: dashboard
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - labwebsystem
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    labels:
+      <<: *labwebsystem-labels
+      com.labwebsystem.role: proxy
+    ports:
+      - "${LAB_CORE_PROXY_HTTP_BIND:-0.0.0.0:80}:80/tcp"
+    volumes:
+      - ./Caddyfile.production:/etc/caddy/Caddyfile:ro
+    depends_on:
+      dashboard:
+        condition: service_healthy
+    networks:
+      - labwebsystem
+
+networks:
+  labwebsystem:
+    name: "labwebsystem-${LAB_CORE_INSTALLATION_ID:?LAB_CORE_INSTALLATION_ID is required}"
+    labels:
+      <<: *labwebsystem-labels
+      com.labwebsystem.role: network
+
+volumes:
+  labwebsystem_cache:
+    name: "labwebsystem-${LAB_CORE_INSTALLATION_ID:?LAB_CORE_INSTALLATION_ID is required}-cache"
+    labels:
+      <<: *labwebsystem-labels
+      com.labwebsystem.role: volume

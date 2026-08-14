@@ -21,6 +21,7 @@ import {
   getRuntimeApplicationTarget,
   getSecretValues,
   markApplicationDeleted,
+  removeRecoveryDescriptor,
   prepareComposeRuntime,
   reconcileDeploymentRouting,
   resolveProjectName,
@@ -547,6 +548,7 @@ export class OperationRunner {
     await this.runStep(operationId, 3, "Cleaning up source directory when requested.", secretValues, async (step) => {
       if (mode === "full") {
         await this.runAppRootDeleteHelper(target.application_id);
+        fs.rmSync(appDataPath, { recursive: true, force: true });
         this.writeSystemLog(operationId, step.stepId, `removed app root ${appRootPath} via helper`, secretValues);
         return;
       }
@@ -569,6 +571,7 @@ export class OperationRunner {
 
     await this.runStep(operationId, 5, "Synchronizing infrastructure after delete.", secretValues, async (step) => {
       markApplicationDeleted(this.db, target.application_id, this.now());
+      removeRecoveryDescriptor(target.application_id);
       await this.syncInfrastructure(`delete:${target.name}`);
       this.writeSystemLog(operationId, step.stepId, `syncInfrastructure delete:${target.name}`, secretValues);
     });

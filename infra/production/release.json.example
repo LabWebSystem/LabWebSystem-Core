@@ -1,0 +1,23 @@
+{
+  "manifestSchemaVersion": 1,
+  "labWebSystemVersion": "0.8.0",
+  "configSchemaVersion": 1,
+  "databaseSchemaVersion": 12,
+  "recoveryDescriptorSchemaVersion": 1,
+  "minimumLwsctlVersion": "0.4.0",
+  "platforms": ["linux/amd64", "linux/arm64"],
+  "images": {
+    "backend": { "reference": "ghcr.io/labwebsystem/backend:0.8.0" },
+    "dashboard": { "reference": "ghcr.io/labwebsystem/dashboard:0.8.0" }
+  },
+  "compose": {
+    "artifact": "compose.production.yml",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "migration": {
+    "required": false,
+    "toDatabaseSchemaVersion": 12,
+    "backupRequired": true,
+    "rollbackSupported": false
+  }
+}

@@ -5,6 +5,7 @@ import { env } from "../lib/env.js";
 export const applicationIdPattern = /^[a-z0-9][a-z0-9_-]{0,127}$/;
 export const normalizedComposeFilename = "docker-compose.normalized.yaml";
 export const generatedEnvFilename = "compose.env";
+export const recoveryDescriptorFilename = "state.json";
 
 export function assertSafeApplicationId(applicationId: string): void {
   if (!applicationIdPattern.test(applicationId)) {
@@ -18,11 +19,12 @@ export function getApplicationRoot(applicationId: string): string {
 }
 
 export function getApplicationSourceRoot(applicationId: string): string {
-  return path.join(getApplicationRoot(applicationId), "src");
+  return path.join(getApplicationRoot(applicationId), "repository");
 }
 
 export function getApplicationDataRoot(applicationId: string): string {
-  return path.join(getApplicationRoot(applicationId), "data");
+  assertSafeApplicationId(applicationId);
+  return path.join(env.appDataRoot, applicationId);
 }
 
 export function getApplicationVolumesRoot(applicationId: string): string {
@@ -39,6 +41,10 @@ export function getNormalizedComposePath(applicationId: string): string {
 
 export function getGeneratedComposeEnvPath(applicationId: string): string {
   return path.join(getApplicationLabCoreRoot(applicationId), generatedEnvFilename);
+}
+
+export function getRecoveryDescriptorPath(applicationId: string): string {
+  return path.join(getApplicationRoot(applicationId), recoveryDescriptorFilename);
 }
 
 export function ensureApplicationRuntimeLayout(applicationId: string): void {

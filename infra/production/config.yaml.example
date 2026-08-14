@@ -1,0 +1,4 @@
+configSchemaVersion: 1
+installationId: replace-with-lwsctl-generated-id
+primaryDomain: example.labwebsystem.local
+dataDirectory: /var/lib/labwebsystem
