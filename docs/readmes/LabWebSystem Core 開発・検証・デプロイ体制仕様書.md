@@ -39,7 +39,7 @@ Production Dockerfile を用いて image を生成し、Linux runtime、依存�
 
 ### 4.3 System Verification
 
-Client → DNS → Reverse Proxy → Dashboard / Backend → Database / Network の経路を、既存の開発状態から独立した Compose 環境で検証する。hostname routing、proxy header、port binding、dashboard ↔ backend 通信、healthcheck、認証を含む system smoke test を対象とする。
+Client → DNS → Reverse Proxy → Dashboard / Backend → Database / Network の経路を、既存の開発状態から独立した Compose 環境で検証する。hostname routing（`dashboard.lab.localhost`）、proxy header、port binding、dashboard ↔ backend 通信、healthcheck、認証を含む system smoke test を対象とする。
 
 ## 5. 設定管理
 

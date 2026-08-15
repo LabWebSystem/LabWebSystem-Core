@@ -12,6 +12,8 @@ services:
       LAB_CORE_APPS_ROOT: /var/lib/labcore/apps
       LAB_CORE_APPDATA_ROOT: /var/lib/labcore/appdata
       LAB_CORE_SYNC_DIR: /var/lib/labcore/generated
+      LAB_CORE_PROXY_CONFIG_PATH: /var/lib/labcore/generated/Caddyfile
+      LAB_CORE_PROXY_HTTP_ONLY: "true"
       LAB_CORE_ROOT_DOMAIN: lab.localhost
     volumes:
       - system_test_data:/var/lib/labcore
@@ -37,7 +39,8 @@ services:
     ports:
       - "127.0.0.1:${LAB_CORE_SYSTEM_TEST_HTTP_PORT:-18080}:80"
     volumes:
-      - ../proxy/Caddyfile.system-test:/etc/caddy/Caddyfile:ro
+      - system_test_data:/etc/labwebsystem:ro
+    command: ["caddy", "run", "--config", "/etc/labwebsystem/generated/Caddyfile", "--adapter", "caddyfile"]
     networks: [default]
 
   dns:

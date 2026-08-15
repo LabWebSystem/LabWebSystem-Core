@@ -12,6 +12,7 @@ type RouteRow = {
   upstream_port: number;
   public_service_name: string;
   application_name: string;
+  upstreamNetworks?: string[];
 };
 
 type RuntimeContainerInfo = {
@@ -40,7 +41,8 @@ const routeQuery = db.prepare(`
     AND a.deleted_at IS NULL
   ORDER BY r.hostname ASC
 `);
-const DEV_PROXY_CONTAINER = "labcore-dev-proxy-proxy-1";
+const MANAGED_PROXY_LABEL = "io.labwebsystem.role=reverse-proxy";
+const MANAGED_PROXY_CADDYFILE = "/etc/labwebsystem/generated/Caddyfile";
 const deleteContainerInstancesStatement = db.prepare(`
   DELETE FROM container_instances
   WHERE application_id = ?
@@ -71,33 +73,34 @@ function buildLocalDevCaddyfile(routes: RouteRow[]): string {
 
 function buildCaddyfileVariant(routes: RouteRow[], mode: "default" | "http-only"): string {
   const lines: string[] = [];
+  const siteLabel = (hostname: string) => (mode === "http-only" ? `http://${hostname}` : hostname);
   lines.push(`# generated_at: ${nowIso()}`);
   lines.push(`# mode: ${env.executionMode}`);
   lines.push(`# variant: ${mode}`);
   lines.push("");
 
-  if (mode === "http-only") {
-    const dashboardHost = `dashboard.${env.rootDomain}`;
-    const apiHost = `api.${env.rootDomain}`;
-    lines.push(`http://${dashboardHost} {`);
-    lines.push("  handle /api* {");
-    lines.push(`    reverse_proxy backend:${env.port}`);
-    lines.push("  }");
-    lines.push("  handle {");
-    lines.push("    reverse_proxy dashboard:4173");
-    lines.push("  }");
-    lines.push("}");
-    lines.push("");
-    lines.push(`http://${apiHost} {`);
-    lines.push(`  reverse_proxy backend:${env.port}`);
-    lines.push("}");
-    lines.push("");
-  }
+  const dashboardHost = `dashboard.${env.rootDomain}`;
+  const apiHost = `api.${env.rootDomain}`;
+  lines.push(`${siteLabel(dashboardHost)} {`);
+  lines.push("  handle /health* {");
+  lines.push(`    reverse_proxy backend:${env.port}`);
+  lines.push("  }");
+  lines.push("  handle /api* {");
+  lines.push(`    reverse_proxy backend:${env.port}`);
+  lines.push("  }");
+  lines.push("  handle {");
+  lines.push("    reverse_proxy dashboard:80");
+  lines.push("  }");
+  lines.push("}");
+  lines.push("");
+  lines.push(`${siteLabel(apiHost)} {`);
+  lines.push(`  reverse_proxy backend:${env.port}`);
+  lines.push("}");
+  lines.push("");
 
   for (const route of routes) {
     const upstream = route.upstream_container ?? route.public_service_name;
-    const siteLabel = mode === "http-only" ? `http://${route.hostname}` : route.hostname;
-    lines.push(`${siteLabel} {`);
+    lines.push(`${siteLabel(route.hostname)} {`);
     lines.push(`  reverse_proxy ${upstream}:${route.upstream_port} {`);
     lines.push("    transport http {");
     lines.push("      dial_timeout 2s");
@@ -119,6 +122,13 @@ function buildCaddyfileVariant(routes: RouteRow[], mode: "default" | "http-only"
 
   if (mode === "http-only") {
     lines.push("http:// {");
+    lines.push(
+      '  respond "Lab-Core fallback: route not configured | host={http.request.host} | reason=no matching route" 404'
+    );
+    lines.push("}");
+    lines.push("");
+  } else {
+    lines.push(":80 {");
     lines.push(
       '  respond "Lab-Core fallback: route not configured | host={http.request.host} | reason=no matching route" 404'
     );
@@ -264,37 +274,50 @@ function resolveRuntimeRoutes(routes: RouteRow[]): RouteRow[] {
 
     return {
       ...route,
-      upstream_container: runtimeContainer?.runtimeName ?? route.upstream_container
+      upstream_container: runtimeContainer?.runtimeName ?? route.upstream_container,
+      upstreamNetworks: runtimeContainer?.networks ?? []
     };
   });
 }
 
-function refreshLocalDevProxy(): void {
-  const runningProxy = runDockerCli(["ps", "--filter", `name=^/${DEV_PROXY_CONTAINER}$`, "--format", "{{.Names}}"]);
-  if (runningProxy !== DEV_PROXY_CONTAINER) {
+function managedProxyContainerIds(): string[] {
+  const containerIds = runDockerCli(["ps", "--filter", `label=${MANAGED_PROXY_LABEL}`, "--format", "{{.ID}}"]);
+  return containerIds ? containerIds.split(/\r?\n/).filter(Boolean) : [];
+}
+
+function refreshManagedProxy(routes: RouteRow[]): void {
+  const proxyContainerIds = managedProxyContainerIds();
+  if (proxyContainerIds.length === 0) {
     return;
   }
 
-  const networks = [...new Set(listManagedComposeContainers().flatMap((container) => container.networks))].sort((a, b) =>
-    a.localeCompare(b)
-  );
+  const upstreamNetworks = new Set(routes.flatMap((route) => route.upstreamNetworks ?? []));
+  const proxyContainers = inspectDockerContainers(proxyContainerIds);
 
-  for (const networkName of networks) {
-    const containers = runDockerCli(["network", "inspect", networkName, "--format", "{{json .Containers}}"]) ?? "";
-    if (containers.includes(DEV_PROXY_CONTAINER)) {
+  for (const proxyContainer of proxyContainers) {
+    const proxyId = typeof proxyContainer.Id === "string" ? proxyContainer.Id : null;
+    if (!proxyId) {
       continue;
     }
-    runDockerCli(["network", "connect", networkName, DEV_PROXY_CONTAINER]);
-  }
 
-  runDockerCli(["restart", DEV_PROXY_CONTAINER]);
+    const networkSettings = proxyContainer.NetworkSettings as { Networks?: Record<string, unknown> } | undefined;
+    const existingNetworks = new Set(Object.keys(networkSettings?.Networks ?? {}));
+
+    for (const networkName of upstreamNetworks) {
+      if (!existingNetworks.has(networkName)) {
+        runDockerCli(["network", "connect", networkName, proxyId]);
+      }
+    }
+
+    runDockerCli(["exec", proxyId, "caddy", "reload", "--config", MANAGED_PROXY_CADDYFILE, "--adapter", "caddyfile"]);
+  }
 }
 
 export function syncInfrastructure(reason: string): { routeCount: number } {
   const routes = resolveRuntimeRoutes(routeQuery.all() as RouteRow[]);
   ensureSyncDir();
 
-  const caddyfile = buildCaddyfile(routes);
+  const caddyfile = env.proxyHttpOnly ? buildLocalDevCaddyfile(routes) : buildCaddyfile(routes);
   const localDevCaddyfile = buildLocalDevCaddyfile(routes);
   const dnsHosts = buildDnsHosts(routes);
   const localDevCaddyfilePath = path.join(env.generatedSyncDir, "Caddyfile.dev");
@@ -302,7 +325,7 @@ export function syncInfrastructure(reason: string): { routeCount: number } {
   fs.writeFileSync(env.generatedProxyConfigPath, caddyfile, "utf-8");
   fs.writeFileSync(localDevCaddyfilePath, localDevCaddyfile, "utf-8");
   fs.writeFileSync(env.generatedDnsHostsPath, dnsHosts, "utf-8");
-  refreshLocalDevProxy();
+  refreshManagedProxy(routes);
 
   recordEvent({
     scope: "infrastructure",

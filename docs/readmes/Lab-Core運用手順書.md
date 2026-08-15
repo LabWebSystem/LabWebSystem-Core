@@ -28,4 +28,4 @@ backend 単体は `mise run backend` で起動し、`http://127.0.0.1:7300/healt
 
 ## Production
 
-Production の Release、Compose、`runtime.env` の契約は [`LabWebSystem Coreデプロイ仕様書.md`](LabWebSystem%20Coreデプロイ仕様書.md) と [`LabWebSystem外部契約.md`](LabWebSystem外部契約.md) を参照してください。デプロイは `mise run deploy --version vX.Y.Z` で開始します。既存のタグまたはReleaseを再利用する場合は、削除確認が表示されます。
+Production の Release、Compose、`runtime.env` の契約は [`LabWebSystem Coreデプロイ仕様書.md`](LabWebSystem%20Coreデプロイ仕様書.md) と [`LabWebSystem外部契約.md`](LabWebSystem外部契約.md) を参照してください。本番では Core 管理 Caddy proxy だけが 80 / 443 を公開し、dashboard は `https://dashboard.<primary-domain>` から利用します。デプロイは `mise run deploy --version vX.Y.Z` で開始します。既存のタグまたはReleaseを再利用する場合は、削除確認が表示されます。

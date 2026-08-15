@@ -130,6 +130,7 @@ export const env = {
     process.env.LAB_CORE_DNS_HOSTS_PATH ?? "./core/backend/data/generated/fukaya-sus.hosts"
   ),
   generatedSyncDir: toAbsolutePath(baseDir, process.env.LAB_CORE_SYNC_DIR ?? "./core/backend/data/generated"),
+  proxyHttpOnly: toBoolean(process.env.LAB_CORE_PROXY_HTTP_ONLY, false),
   appRootDeleteHelperPath: toAbsolutePath(
     baseDir,
     process.env.LAB_CORE_APP_ROOT_DELETE_HELPER_PATH ?? "./core/backend/scripts/delete-app-root.mjs"

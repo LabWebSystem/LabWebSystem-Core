@@ -36,7 +36,7 @@ mise run dev
 
 ## Production
 
-Production は GitHub Release の `compose.yaml` と `runtime.env` で動作します。Release 契約と導入手順は [`LabWebSystem Coreデプロイ仕様書.md`](docs/readmes/LabWebSystem%20Coreデプロイ仕様書.md) を参照してください。
+Production は GitHub Release の `compose.yaml` と `runtime.env` で動作します。Core 管理 Caddy proxy だけが host の 80 / 443 を公開し、dashboard、backend、登録 Application は内部 network に閉じます。Release 契約と導入手順は [`LabWebSystem Coreデプロイ仕様書.md`](docs/readmes/LabWebSystem%20Coreデプロイ仕様書.md) を参照してください。
 
 ## バージョン
 

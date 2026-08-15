@@ -22,11 +22,20 @@ execFileSync("docker", ["build", "-f", "infra/compose/Dockerfile.dashboard", "-t
 run(["up", "-d"]);
 
 const port = env.LAB_CORE_SYSTEM_TEST_HTTP_PORT;
+const dashboardUrl = `http://dashboard.lab.localhost:${port}`;
 for (let attempt = 0; attempt < 45; attempt += 1) {
   try {
-    execFileSync("curl", ["-fsS", `http://127.0.0.1:${port}/health`], { stdio: "ignore" });
-    execFileSync("curl", ["-fsS", `http://127.0.0.1:${port}/api`], { stdio: "ignore" });
-    execFileSync("curl", ["-fsS", `http://127.0.0.1:${port}/`], { stdio: "ignore" });
+    execFileSync("curl", ["--noproxy", "*", "--resolve", `dashboard.lab.localhost:${port}:127.0.0.1`, "-fsS", `${dashboardUrl}/health`], { stdio: "ignore" });
+    execFileSync("curl", ["--noproxy", "*", "--resolve", `dashboard.lab.localhost:${port}:127.0.0.1`, "-fsS", `${dashboardUrl}/api`], { stdio: "ignore" });
+    execFileSync("curl", ["--noproxy", "*", "--resolve", `dashboard.lab.localhost:${port}:127.0.0.1`, "-fsS", `${dashboardUrl}/`], { stdio: "ignore" });
+    const unknownHostStatus = execFileSync(
+      "curl",
+      ["--noproxy", "*", "-sS", "-o", "/dev/null", "-w", "%{http_code}", `http://127.0.0.1:${port}/`],
+      { encoding: "utf8" }
+    ).trim();
+    if (unknownHostStatus !== "404") {
+      throw new Error(`unexpected response for an unknown host: ${unknownHostStatus}`);
+    }
     console.log("system verification passed: DNS / proxy / dashboard / backend containers are reachable");
     process.exit(0);
   } catch {

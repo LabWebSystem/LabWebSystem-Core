@@ -7,6 +7,7 @@
 - ADR-006 | ACCEPTED | - | Core ReleaseをCompose単体で再生成可能な最小契約へ統一する
 - ADR-007 | ACCEPTED | - | 開発者向け操作を目的中心の mise task に統一する
 - ADR-008 | ACCEPTED | - | deploy は明示バージョン指定と確認付きRelease再作成を行う
+- ADR-009 | ACCEPTED | - | Production の公開入口を Core 管理 Caddy に統一する
 - BUG-001 | VERIFIED | production image / backend startup | Production Backend imageからOpenAPI定義が欠落する
 - BUG-002 | VERIFIED | production image / Docker runtime | Production Backend imageにDocker CLIが含まれない
 - BUG-003 | VERIFIED | release-automation | Release workflowのchecksum検証がrunnerで失敗する
@@ -20,6 +21,7 @@
 - CHG-011 | ACTIVE | - | Production Compose の Backend 永続パスを readiness 契約へ統一
 - CHG-012 | ACTIVE | - | mise task 中心の開発・検証・デプロイ体制へ移行
 - CHG-014 | ACTIVE | - | deploy に明示versionとRelease再作成フローを追加
+- CHG-015 | ACTIVE | - | Production の公開を Core 管理 Caddy proxy に集約
 - SUP-001 | ACTIVE | - | 旧Core外部契約とRelease公開方式を最小Compose契約で置換する
 - SUP-002 | ACTIVE | - | profile / system Yarn 操作体系を mise task 体系で置換する
 - SUP-003 | ACTIVE | - | deployの自動tag準備を明示version指定方式で置換する

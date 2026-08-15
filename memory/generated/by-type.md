@@ -11,6 +11,7 @@
 - ADR-006 | ACCEPTED | - | Core ReleaseをCompose単体で再生成可能な最小契約へ統一する
 - ADR-007 | ACCEPTED | - | 開発者向け操作を目的中心の mise task に統一する
 - ADR-008 | ACCEPTED | - | deploy は明示バージョン指定と確認付きRelease再作成を行う
+- ADR-009 | ACCEPTED | - | Production の公開入口を Core 管理 Caddy に統一する
 
 ## BUG
 - BUG-001 | VERIFIED | production image / backend startup | Production Backend imageからOpenAPI定義が欠落する
@@ -34,6 +35,7 @@
 - CHG-012 | ACTIVE | - | mise task 中心の開発・検証・デプロイ体制へ移行
 - CHG-013 | SUPERSEDED | - | deploy task がrelease tagを準備してCIを起動するよう修正
 - CHG-014 | ACTIVE | - | deploy に明示versionとRelease再作成フローを追加
+- CHG-015 | ACTIVE | - | Production の公開を Core 管理 Caddy proxy に集約
 
 ## SUP
 - SUP-001 | ACTIVE | - | 旧Core外部契約とRelease公開方式を最小Compose契約で置換する

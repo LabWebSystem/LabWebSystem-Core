@@ -34,8 +34,6 @@ services:
   dashboard:
     image: "ghcr.io/labwebsystem/dashboard:${LWS_VERSION:?LWS_VERSION is required}"
     restart: unless-stopped
-    ports:
-      - "${LWS_HTTP_BIND:-0.0.0.0:80}:80/tcp"
     depends_on:
       backend:
         condition: service_healthy
@@ -46,5 +44,29 @@ services:
       timeout: 5s
       retries: 6
 
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    labels:
+      io.labwebsystem.role: reverse-proxy
+    command: ["caddy", "run", "--config", "/etc/labwebsystem/generated/Caddyfile", "--adapter", "caddyfile"]
+    depends_on:
+      backend:
+        condition: service_healthy
+      dashboard:
+        condition: service_healthy
+    ports:
+      - "${LWS_HTTP_BIND:-0.0.0.0:80}:80/tcp"
+      - "${LWS_HTTPS_BIND:-0.0.0.0:443}:443/tcp"
+    volumes:
+      - "${LWS_DATA_DIR:?LWS_DATA_DIR is required}/generated:/etc/labwebsystem/generated:ro"
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [labwebsystem]
+
 networks:
   labwebsystem: {}
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}

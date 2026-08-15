@@ -33,6 +33,8 @@ image情報、DB schema、migration、rollback、Application情報、architectur
 
 `compose.yaml`が本番ランタイム構成の唯一の正本である。Core service、OCI image、network、永続データのmount、restart policy、依存関係、healthcheckはここで定義し、lwsctlやGitHub Actionsは重複して管理しない。
 
+公開入口は Compose が管理する Caddy proxy だけである。host へ公開するのは proxy の HTTP / HTTPS port だけとし、dashboard、backend、登録 Application の各 container は Docker network 内に閉じる。Backend は `dashboard.<LWS_PRIMARY_DOMAIN>`、`api.<LWS_PRIMARY_DOMAIN>`、登録 Application の hostname を含む Caddyfile を生成し、proxy はその設定を reload する。未知の HTTP Host は 404 とする。
+
 ホスト上の配置は次のとおりとする。
 
 ```text
@@ -58,7 +60,11 @@ LWS_VERSION=0.1.0
 LWS_PRIMARY_DOMAIN=example.com
 LWS_INSTALLATION_ID=<stable-installation-id>
 LWS_DATA_DIR=/var/lib/labwebsystem
+LWS_HTTP_BIND=0.0.0.0:80
+LWS_HTTPS_BIND=0.0.0.0:443
 ```
+
+`dashboard.example.com` を利用する場合は `LWS_PRIMARY_DOMAIN=example.com` を指定し、DNS でその hostname をホストへ向ける。Caddy は有効な公開ドメインで TLS 証明書を自動管理するため、host の firewall でも TCP 80 / 443 を proxy 用に許可する。DNS は名前解決のみを担い、管理画面の認証境界にはならない。
 
 手動インストールはReleaseから`compose.yaml`を取得してこのファイルを作成した後、次の操作だけで完了する。ホストにNode.js、Yarn、npm、Git、build toolchainは要求しない。
 
